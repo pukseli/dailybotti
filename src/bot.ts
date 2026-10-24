@@ -224,11 +224,13 @@ Alkuperäinen tulostaso: ${stats.rawAverage.toFixed(1)} / 5.0
 Karsitut tilastoharhat: ${stats.outlierCount} kpl (${stats.outlierPuzzles.join(", ")})
 Regressoitu todellinen taso: ${stats.regressedAverage.toFixed(1)} / 5.0 (pudotus -${stats.dropPercent.toFixed(1)} %)`;
 
-      const explanation = await generateExplanation(ctx.ai, playerName, "player", details);
+      const aiRes = await generateExplanation(ctx.ai, playerName, "player", details);
       const report: RegressioReport = {
         playerName,
         stats,
-        explanation,
+        outlierLabel: aiRes.outlierLabel,
+        conclusion: aiRes.conclusion,
+        explanation: aiRes.explanation,
         subtitle: `[Hajontakomissio] Viestin pelituloksen (${messageResults.map((r) => r.game).join(", ")}) karsinta`,
       };
       await reply(ctx, msg, renderRegressio(report));
@@ -241,17 +243,24 @@ Regressoitu todellinen taso: ${stats.regressedAverage.toFixed(1)} / 5.0 (pudotus
       const stats = calculateRegression(results);
 
       let explanation = "";
+      let outlierLabel: string | undefined;
+      let conclusion: string | undefined;
       if (stats.totalPlayed > 0) {
         const details = `Pelatut pelit: ${stats.totalPlayed} kpl
 Alkuperäinen keskiarvo: ${stats.rawAverage.toFixed(1)} / 5.0
 Karsitut tilastoharhat: ${stats.outlierCount} kpl (${stats.outlierPuzzles.slice(0, 3).join(", ")})
 Regressoitu todellinen taso: ${stats.regressedAverage.toFixed(1)} / 5.0 (pudotus -${stats.dropPercent.toFixed(1)} %)`;
-        explanation = await generateExplanation(ctx.ai, targetName, "player", details);
+        const aiRes = await generateExplanation(ctx.ai, targetName, "player", details);
+        explanation = aiRes.explanation;
+        outlierLabel = aiRes.outlierLabel;
+        conclusion = aiRes.conclusion;
       }
 
       const report: RegressioReport = {
         playerName: targetName,
         stats,
+        outlierLabel,
+        conclusion,
         explanation,
       };
       await reply(ctx, msg, renderRegressio(report));
@@ -266,17 +275,24 @@ Regressoitu todellinen taso: ${stats.regressedAverage.toFixed(1)} / 5.0 (pudotus
   const stats = calculateRegression(results);
 
   let explanation = "";
+  let outlierLabel: string | undefined;
+  let conclusion: string | undefined;
   if (stats.totalPlayed > 0) {
     const details = `Pelatut pelit: ${stats.totalPlayed} kpl
 Alkuperäinen keskiarvo: ${stats.rawAverage.toFixed(1)} / 5.0
 Karsitut tilastoharhat: ${stats.outlierCount} kpl (${stats.outlierPuzzles.slice(0, 3).join(", ")})
 Regressoitu todellinen taso: ${stats.regressedAverage.toFixed(1)} / 5.0 (pudotus -${stats.dropPercent.toFixed(1)} %)`;
-    explanation = await generateExplanation(ctx.ai, target.name, "player", details);
+    const aiRes = await generateExplanation(ctx.ai, target.name, "player", details);
+    explanation = aiRes.explanation;
+    outlierLabel = aiRes.outlierLabel;
+    conclusion = aiRes.conclusion;
   }
 
   const report: RegressioReport = {
     playerName: target.name,
     stats,
+    outlierLabel,
+    conclusion,
     explanation,
     subtitle: target.isLeader ? "[Hajontakomissio] Tulostaulukon kärjen karsinta" : undefined,
   };
@@ -629,7 +645,7 @@ Toiseksi tulleen pisteet: ${blowout.secondScore.toFixed(1)} / 300 (voittomargina
 Karsittu päivän huippusuonenveto: ${sorted[0] ? `${sorted[0].game} (${sorted[0].score}/${sorted[0].max_score})` : "huippupeli"}
 Regressoidut pisteet: ${regressedScore.toFixed(1)} / 300`;
 
-    const explanation = await generateExplanation(ctx.ai, winnerName, "blowout", details);
+    const aiRes = await generateExplanation(ctx.ai, winnerName, "blowout", details);
 
     blowoutReport = {
       winnerName,
@@ -637,7 +653,7 @@ Regressoidut pisteet: ${regressedScore.toFixed(1)} / 300`;
       secondScore: blowout.secondScore,
       marginPercent: blowout.marginPercent,
       regressedScore,
-      explanation,
+      explanation: aiRes.explanation,
     };
   }
 

@@ -122,21 +122,27 @@ export function renderSummary(opts: {
 }
 
 export function renderRegressio(report: RegressioReport): string {
-  const { playerName, stats, explanation, subtitle } = report;
+  const { playerName, stats, explanation, subtitle, outlierLabel, conclusion } = report;
   if (stats.totalPlayed === 0) {
     return `📊 <b>REGRESSIOANALYYSI: ${escapeHtml(playerName)}</b>\n\nEi tallennettuja pelejä. Pelaa ensin päivän pelejä, jotta tilastoja voidaan karsia.`;
   }
 
   const sub = subtitle ?? "[Hajontakomissio] Kun tilastoista karsitaan epärealistiset poikkeamat";
+  const puzzleList = stats.outlierPuzzles.length > 0 ? ` (${stats.outlierPuzzles.slice(0, 3).join(", ")}${stats.outlierPuzzles.length > 3 ? "..." : ""})` : "";
+  const outlierQuip = outlierLabel
+    ? `${stats.outlierCount} kpl${puzzleList} – ${escapeHtml(outlierLabel)}`
+    : `${stats.outlierCount} kpl${puzzleList}`;
+  const conclusionQuip = conclusion ? escapeHtml(conclusion) : "Taantuu sarjan harmaaseen perusmassaan.";
+
   const lines = [
     `📊 <b>REGRESSIOANALYYSI: ${escapeHtml(playerName)}</b>`,
     `<i>${escapeHtml(sub)}</i>`,
     "",
     "📉 <b>Tilastokorjaus:</b>",
     `• Alkuperäinen keskiarvo: ${stats.rawAverage.toFixed(1)} / 5.0 (${stats.totalPlayed} ${stats.totalPlayed === 1 ? "tulos" : "peliä"})`,
-    `• Karsitut suonenvedot: ${stats.outlierCount} kpl (${stats.outlierPuzzles.slice(0, 3).join(", ")}${stats.outlierPuzzles.length > 3 ? "..." : ""})`,
+    `• Karsitut suonenvedot: ${outlierQuip}`,
     `• <b>Regressoitu taso:</b> ${stats.regressedAverage.toFixed(1)} / 5.0 (📉 -${stats.dropPercent.toFixed(1)}%)`,
-    `• <b>Johtopäätös:</b> Taantuu sarjan harmaaseen perusmassaan.`,
+    `• <b>Johtopäätös:</b> ${conclusionQuip}`,
     "",
     "🧠 <b>Asiantuntijalausunto:</b>",
     `<i>"${escapeHtml(explanation)}"</i>`,

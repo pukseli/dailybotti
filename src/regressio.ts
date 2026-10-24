@@ -18,6 +18,8 @@ export interface RegressioReport {
   playerName: string;
   stats: RegressionStats;
   explanation: string;
+  outlierLabel?: string;
+  conclusion?: string;
   subtitle?: string;
 }
 
@@ -162,20 +164,60 @@ export function checkBlowout(overallStandings: Standing[]): BlowoutCheck {
   };
 }
 
-export const FALLBACK_EXPLANATIONS = [
-  "Tulosprofiili muistuttaa hämmästyttävän paljon Lahden huoltoaseman lääkärinlaukun sisältöä. Heti kun pitoalue pestään puhtaaksi Hemohesista, pelaaja taantuu harmaaseen perusmassaan.",
-  "Kovin suonenveto johtui pelkästään hetkellisestä suojakelin voiteluedusta. Todellisuudessa pelaaja häviää Juha Miedon tavoin sadasosasekunnilla joka ikinen kerta.",
-  "Tämä tulos oli pelkkää järjetöntä lottotason topdeckiä juuri oikealla vuorolla. Kun satunnaistuuri karsitaan pois, käteen jää vain paha mana flood ja toivoton mulligan.",
-  "Huippupisteet selittyvät ainoastaan vastustajan 322-tason throwauksella. Todellisuudessa pelaaja ostaa Divine Rapierin, kuolee ilman buybackia ja syöttää voiton suoraan viholliselle.",
-  "Pelaajan suoritus oli täyttä Silver-tason tuurijuoksua savujen läpi sokkona. Tilastokorjauksen jälkeen edessä on vääjäämätön 15–3-johdon heittäminen suoraan vihollisen eco-kierrokselle.",
-  "Tilastokorjauksen jälkeen suoritus vastaa vuoden 2003 MM-puolivälierää Ruotsia vastaan. Näennäinen 5–1-johto sulaa vääjäämättä täydelliseksi katastrofiksi.",
-  "Kyseessä oli vain Matti Nykäsen fifty-sixty tuulirako, josta taito oli kaukana. Kun suotuisa puuska laantuu, pelaaja putoaa suoraan kumpuun.",
-  "Pisteet näyttävät hyvältä vain hetken, vähän kuin Ferrarin F1-taktiikka ennen ensimmäistä varikkopysähdystä. Todellinen vauhti riittää korkeintaan peräpään taisteluun.",
+export interface FallbackItem {
+  outlierLabel: string;
+  conclusion: string;
+  explanation: string;
+}
+
+export const FALLBACK_ITEMS: FallbackItem[] = [
+  {
+    outlierLabel: "Hemohes-tason lääkärinlaukun antimia",
+    conclusion: "Taantuu Juha Miedon tavoin ikuiseksi sadasosahäviäjäksi.",
+    explanation: "Tulosprofiili muistuttaa hämmästyttävän paljon Lahden huoltoaseman lääkärinlaukun sisältöä. Heti kun pitoalue pestään puhtaaksi Hemohesista, pelaaja taantuu harmaaseen perusmassaan.",
+  },
+  {
+    outlierLabel: "Hetkellistä suojakelin voiteluapua",
+    conclusion: "Häviää sadasosasekunnilla joka ikinen kerta.",
+    explanation: "Kovin suonenveto johtui pelkästään hetkellisestä suojakelin voiteluedusta. Todellisuudessa pelaaja häviää Juha Miedon tavoin sadasosasekunnilla joka ikinen kerta.",
+  },
+  {
+    outlierLabel: "Järjetöntä lottotason topdeck-tuuria",
+    conclusion: "Käteen jää vain paha mana flood ja toivoton mulligan.",
+    explanation: "Tämä tulos oli pelkkää järjetöntä lottotason topdeckiä juuri oikealla vuorolla. Kun satunnaistuuri karsitaan pois, käteen jää vain paha mana flood ja toivoton mulligan.",
+  },
+  {
+    outlierLabel: "Vastustajan 322-tason heittelyä",
+    conclusion: "Syöttää Divine Rapierin suoraan vihollisen kantaan.",
+    explanation: "Huippupisteet selittyvät ainoastaan vastustajan 322-tason throwauksella. Todellisuudessa pelaaja ostaa Divine Rapierin, kuolee ilman buybackia ja syöttää voiton suoraan viholliselle.",
+  },
+  {
+    outlierLabel: "Sokeaa juoksua savujen läpi Silver-tähtäyksellä",
+    conclusion: "15–3-johdon heittäminen vihollisen eco-kierrokselle.",
+    explanation: "Pelaajan suoritus oli täyttä Silver-tason tuurijuoksua savujen läpi sokkona. Tilastokorjauksen jälkeen edessä on vääjäämätön 15–3-johdon heittäminen suoraan vihollisen eco-kierrokselle.",
+  },
+  {
+    outlierLabel: "Näennäistä 5–1-harhajohtoa",
+    conclusion: "Täydellinen sulaminen harmaaksi sarjajyräksi.",
+    explanation: "Tilastokorjauksen jälkeen suoritus vastaa vuoden 2003 MM-puolivälierää Ruotsia vastaan. Näennäinen 5–1-johto sulaa vääjäämättä täydelliseksi katastrofiksi.",
+  },
+  {
+    outlierLabel: "Fifty-sixty tuulirakolottoa",
+    conclusion: "Putoaa suoraan kumpuun ilman tyylipisteitä.",
+    explanation: "Kyseessä oli vain Matti Nykäsen fifty-sixty tuulirako, josta taito oli kaukana. Kun suotuisa puuska laantuu, pelaaja putoaa suoraan kumpuun.",
+  },
+  {
+    outlierLabel: "Ferrarin varikkotaktiikan kaltaista silmänlumetta",
+    conclusion: "Vauhti riittää korkeintaan peräpään taisteluun.",
+    explanation: "Pisteet näyttävät hyvältä vain hetken, vähän kuin Ferrarin F1-taktiikka ennen ensimmäistä varikkopysähdystä. Todellinen vauhti riittää korkeintaan peräpään taisteluun.",
+  },
 ];
+
+export const FALLBACK_EXPLANATIONS = FALLBACK_ITEMS.map((it) => it.explanation);
 
 export const SYSTEM_PROMPT = `Olet kyyninen, ivallinen ja ilkikurinen tilastoasiantuntija (Hajonta- ja Kärykomission ylitarkastaja). 
 Pelaajan tuloksista poistettiin parhaat suoritukset (outlierit), koska ne olivat tilastollista harhaa, puhdasta tuuria tai vilppiä. 
-Tehtäväsi on antaa 1-2 virkkeen ivallinen ja absurdi lausunto suomeksi sille, miksi pelaaja on todellisuudessa täysin harmaa rivipelaaja.
+Tehtäväsi on antaa ivallinen ja absurdi analyysi suomeksi sille, miksi pelaaja on todellisuudessa täysin harmaa rivipelaaja.
 
 Käytä eläviä vertauksia suomalaisesta urheilusta, kansainvälisestä huippu-urheilusta tai e-urheilusta.
 HUOMAA: Alla mainitut tapaukset ovat VAIN esimerkkejä antamassa suuntaa. Saat ja sinun kannattaa keksiä ja soveltaa vapaasti mitä tahansa muitakin tunnettuja lajeja, urheilutapahtumia, e-urheilupelejä, sääntöjä, meemejä ja klassikkofiascoja:
@@ -185,14 +227,41 @@ HUOMAA: Alla mainitut tapaukset ovat VAIN esimerkkejä antamassa suuntaa. Saat j
 3. Kansainvälinen urheilu (esimerkkejä: F1, jalkapallon sulamiset, tenniksen tuplavirheet jne.).
 
 Ehdottomat säännöt:
-- Vastaa VAIN 1-2 virkkeellä suomeksi.
+- Vastaa AINOASTAAN seuraavassa 3 rivin muodossa:
+KARSINTA: <lyhyt 2-6 sanan ivallinen luonnehdinta karsituista suonevedoista>
+JOHTOPÄÄTÖS: <lyhyt 3-8 sanan ivallinen johtopäätös todellisesta tasosta>
+LAUSUNTO: <1-2 virkkeen pureva asiantuntijalausunto>
 - YHDESSÄ VASTAUKSESSA KESKITYTÄÄN VAIN YHTEEN LAJIIN, PELIIN TAI TAPAHTUMAAN KERRALLAAN. Älä sotke useita eri lajeja keskenään samaan vastaukseen (esimerkiksi Magic: The Gatheringia EI saa sekoittaa hiihtoon, eikä Counter-Strikea jalkapalloon). Pysy tiukasti yhdessä valitsemassasi teemassa.
 - ÄLÄ KOSKAAN mainitse amerikkalaista jalkapalloa, NFL:ää tai Patrick Mahomesia.
 - Sävy on pseudotieteellisen vakava, mutta sisältö purevan humoristinen.`;
 
-export function pickFallback(): string {
-  const idx = Math.floor(Math.random() * FALLBACK_EXPLANATIONS.length);
-  return FALLBACK_EXPLANATIONS[idx] ?? FALLBACK_EXPLANATIONS[0]!;
+export function pickFallback(): FallbackItem {
+  const idx = Math.floor(Math.random() * FALLBACK_ITEMS.length);
+  return FALLBACK_ITEMS[idx] ?? FALLBACK_ITEMS[0]!;
+}
+
+export function parseExplanation(text: string): FallbackItem {
+  const karsintaMatch = /KARSINTA:\s*([^\n]+)/i.exec(text);
+  const johtopaatosMatch = /JOHTOPÄÄTÖS:\s*([^\n]+)/i.exec(text);
+  const lausuntoMatch = /LAUSUNTO:\s*([\s\S]+)/i.exec(text);
+
+  if (karsintaMatch || johtopaatosMatch || lausuntoMatch) {
+    const fallback = pickFallback();
+    return {
+      outlierLabel: karsintaMatch ? karsintaMatch[1]!.trim().replace(/^["'«]+|["'»]+$/g, "") : fallback.outlierLabel,
+      conclusion: johtopaatosMatch ? johtopaatosMatch[1]!.trim().replace(/^["'«]+|["'»]+$/g, "") : fallback.conclusion,
+      explanation: lausuntoMatch
+        ? lausuntoMatch[1]!.trim().replace(/^["'«]+|["'»]+$/g, "")
+        : text.replace(/^["'«]+|["'»]+$/g, "").trim() || fallback.explanation,
+    };
+  }
+
+  const fallback = pickFallback();
+  return {
+    outlierLabel: fallback.outlierLabel,
+    conclusion: fallback.conclusion,
+    explanation: text.replace(/^["'«]+|["'»]+$/g, "").trim() || fallback.explanation,
+  };
 }
 
 /**
@@ -203,7 +272,7 @@ export async function generateExplanation(
   name: string,
   context: "player" | "blowout",
   details: string,
-): Promise<string> {
+): Promise<FallbackItem> {
   if (!ai) return pickFallback();
 
   const userPrompt =
@@ -212,21 +281,20 @@ export async function generateExplanation(
 Pelaaja: ${name}
 ${details}
 
-Kirjoita 1-2 virkkeen asiantuntijalausunto pelaajan todellisesta tasosta ohjeistettujen urheilu- ja e-urheiluvertauksien hengessä.`
+Kirjoita analyysi vaaditussa 3 rivin formaatissa (KARSINTA, JOHTOPÄÄTÖS, LAUSUNTO).`
       : `Konteksti: Päivän tulosjulkistus, jossa voittaja saavutti epäilyttävän ylivoiman (>20 % johto).
 Päivän voittaja: ${name}
 ${details}
 
-Kirjoita 1-2 virkkeen ivallinen varoitus siitä, miksi voittajan murskajohto oli pelkkä tilastollinen suonenveto ja kuinka se sulaa vääjäämättä.`;
+Kirjoita analyysi vaaditussa 3 rivin formaatissa (KARSINTA, JOHTOPÄÄTÖS, LAUSUNTO).`;
 
   try {
-    // Run AI with timeout
     const aiPromise = ai.run("@cf/meta/llama-3.1-8b-instruct", {
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: userPrompt },
       ],
-      max_tokens: 120,
+      max_tokens: 160,
       temperature: 0.75,
     });
 
@@ -237,8 +305,7 @@ Kirjoita 1-2 virkkeen ivallinen varoitus siitä, miksi voittajan murskajohto oli
     const res: any = await Promise.race([aiPromise, timeoutPromise]);
     const text = typeof res?.response === "string" ? res.response.trim() : "";
     if (text.length > 5) {
-      // Clean any potential leading/trailing quotes
-      return text.replace(/^["'«]+|["'»]+$/g, "").trim();
+      return parseExplanation(text);
     }
     return pickFallback();
   } catch (err) {

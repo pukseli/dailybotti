@@ -118,18 +118,23 @@ describe("checkBlowout", () => {
 
 describe("generateExplanation and fallbacks", () => {
   it("uses fallback when AI is undefined", async () => {
-    const text = await generateExplanation(undefined, "Teemu", "player", "test details");
-    expect(FALLBACK_EXPLANATIONS).toContain(text);
+    const res = await generateExplanation(undefined, "Teemu", "player", "test details");
+    expect(FALLBACK_EXPLANATIONS).toContain(res.explanation);
+    expect(res.outlierLabel.length).toBeGreaterThan(0);
+    expect(res.conclusion.length).toBeGreaterThan(0);
   });
 
-  it("calls AI when provided", async () => {
+  it("calls AI and parses structured response when provided", async () => {
     const mockAi: Ai = {
       run: async (_model, _input) => ({
-        response: "Matin tulokset sulavat kuin 5-1 johto Ruotsia vastaan.",
+        response:
+          "KARSINTA: Hemohes-vilppiä\nJOHTOPÄÄTÖS: Sulaa harmaaksi massaksi\nLAUSUNTO: Matin tulokset sulavat kuin 5-1 johto Ruotsia vastaan.",
       }),
     };
-    const text = await generateExplanation(mockAi, "Matti", "player", "details");
-    expect(text).toBe("Matin tulokset sulavat kuin 5-1 johto Ruotsia vastaan.");
+    const res = await generateExplanation(mockAi, "Matti", "player", "details");
+    expect(res.outlierLabel).toBe("Hemohes-vilppiä");
+    expect(res.conclusion).toBe("Sulaa harmaaksi massaksi");
+    expect(res.explanation).toBe("Matin tulokset sulavat kuin 5-1 johto Ruotsia vastaan.");
   });
 
   it("falls back gracefully if AI throws", async () => {
@@ -138,8 +143,8 @@ describe("generateExplanation and fallbacks", () => {
         throw new Error("Rate limit exceeded");
       },
     };
-    const text = await generateExplanation(failingAi, "Matti", "blowout", "details");
-    expect(FALLBACK_EXPLANATIONS).toContain(text);
+    const res = await generateExplanation(failingAi, "Matti", "blowout", "details");
+    expect(FALLBACK_EXPLANATIONS).toContain(res.explanation);
   });
 
   it("fallbacks do not contain NFL or Mahomes keywords", () => {
@@ -152,7 +157,7 @@ describe("generateExplanation and fallbacks", () => {
 });
 
 describe("renderRegressio", () => {
-  it("renders report nicely in HTML", () => {
+  it("renders report nicely in HTML with AI quips", () => {
     const html = renderRegressio({
       playerName: "Matti",
       stats: {
@@ -163,13 +168,17 @@ describe("renderRegressio", () => {
         dropPercent: 56.3,
         outlierPuzzles: ["eraly (700/700)"],
       },
+      outlierLabel: "Hemohes-tason lääkärinlaukun antimia",
+      conclusion: "Taantuu Juha Miedon tavoin ikuiseksi sadasosahäviäjäksi.",
       explanation: "Tulos sulaa kuin pito suojakelillä.",
     });
 
     expect(html).toContain("<b>REGRESSIOANALYYSI: Matti</b>");
     expect(html).toContain("4.8 / 5.0");
+    expect(html).toContain("Hemohes-tason lääkärinlaukun antimia");
     expect(html).toContain("2.1 / 5.0");
     expect(html).toContain("-56.3%");
+    expect(html).toContain("Taantuu Juha Miedon tavoin ikuiseksi sadasosahäviäjäksi.");
     expect(html).toContain("Tulos sulaa kuin pito suojakelillä.");
   });
 });
