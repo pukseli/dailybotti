@@ -46,3 +46,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Initialize bot & update webhook/commands
+        run: |
+          curl -s -S -f "https://daily-games-bot.daily-games-bot.workers.dev/init?secret=${{ secrets.WEBHOOK_SECRET }}"
