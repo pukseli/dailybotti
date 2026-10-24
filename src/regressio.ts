@@ -272,6 +272,7 @@ export async function generateExplanation(
   name: string,
   context: "player" | "blowout",
   details: string,
+  model: string = "@cf/meta/llama-3.1-8b-instruct-fp8",
 ): Promise<FallbackItem> {
   if (!ai) return pickFallback();
 
@@ -289,17 +290,17 @@ ${details}
 Kirjoita analyysi vaaditussa 3 rivin formaatissa (KARSINTA, JOHTOPÄÄTÖS, LAUSUNTO).`;
 
   try {
-    const aiPromise = ai.run("@cf/meta/llama-3.1-8b-instruct-fp8", {
+    const aiPromise = ai.run(model, {
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: userPrompt },
       ],
-      max_tokens: 160,
+      max_tokens: 220,
       temperature: 0.75,
     });
 
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("AI timeout")), 8500),
+      setTimeout(() => reject(new Error("AI timeout")), 12000),
     );
 
     const res: any = await Promise.race([aiPromise, timeoutPromise]);

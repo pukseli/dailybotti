@@ -130,6 +130,7 @@ export default {
     if (url.pathname === "/test-ai") {
       if (!env.AI) return new Response("env.AI missing", { status: 500 });
       const start = Date.now();
+      const model = url.searchParams.get("model") || undefined;
       try {
         const { generateExplanation } = await import("./regressio");
         const result = await generateExplanation(
@@ -137,6 +138,7 @@ export default {
           url.searchParams.get("name") || "Testaaja",
           "player",
           "Pelattuja pelejä: 5, Alkuperäinen keskiarvo: 4.8 / 5.0, Karsitut: eraly (700/700), Uusi taso: 2.1 / 5.0 (-56.3 %)",
+          model,
         );
         return Response.json({
           status: "ok",
