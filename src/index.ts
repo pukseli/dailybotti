@@ -31,7 +31,7 @@ const PRIVATE_COMMANDS = [
   { command: "me", description: "Your stats" },
   { command: "leaderboard", description: "All-time standings" },
   { command: "regressio", description: "Hajonta- ja outlier-analyysi" },
-  { command: "help", description: "How it works" },
+  { command: "help", description: "Käyttö- ja käyttöönotto-ohjeet" },
 ];
 
 const GROUP_COMMANDS = [
@@ -40,6 +40,7 @@ const GROUP_COMMANDS = [
   { command: "me", description: "Your stats" },
   { command: "regressio", description: "Hajonta- ja outlier-analyysi" },
   { command: "setup", description: "Link the bot to this group (admins)" },
+  { command: "help", description: "Käyttö- ja käyttöönotto-ohjeet" },
 ];
 
 /** One-time setup, opened in a browser after deploying: checks the config and registers the webhook. */

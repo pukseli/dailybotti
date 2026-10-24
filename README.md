@@ -107,7 +107,7 @@ On a phone, Share opens the share menu, so you can pick Telegram and then the gr
 
 | Command | Where | What it does |
 |---|---|---|
-| `/start`, `/help` | private | How it works |
+| `/start`, `/help` | both | How to take part, the rules, the commands and the group setup steps (in Finnish). Works in a group before `/setup` too |
 | `/today` | both | Today's board. In the group it moves the board to the bottom of the chat |
 | `/me` | both | Your medals, averages and bests |
 | `/leaderboard` | both | All-time standings |

@@ -144,6 +144,12 @@ export async function handleUpdate(ctx: Ctx, update: Update): Promise<void> {
 
   if (msg.chat.type !== "group" && msg.chat.type !== "supergroup") return;
   if (command.kind === "command" && command.name === "setup") return setup(ctx, msg, settings);
+  if (command.kind === "command" && command.name === "help") {
+    // Answered before /setup too, since that's when the setup steps are needed.
+    const linked = msg.chat.id === settings.groupChatId;
+    await reply(ctx, msg, renderHelp({ closeTime: ctx.closeTime, timeZone: ctx.timeZone, linked }));
+    return;
+  }
   if (msg.chat.id !== settings.groupChatId) return;
   if (command.kind === "command") return groupCommand(ctx, msg, command.name, settings);
   if (!msg.from || msg.from.is_bot || msg.sender_chat) return;
@@ -356,9 +362,6 @@ async function groupCommand(ctx: Ctx, msg: Message, name: string, settings: Sett
       if (msg.from && !msg.sender_chat) {
         await regressioAction(ctx, msg, msg.from, msg.text ?? msg.caption ?? "");
       }
-      return;
-    case "help":
-      await reply(ctx, msg, renderHelp({ closeTime: ctx.closeTime, timeZone: ctx.timeZone, linked: true }));
       return;
   }
 }

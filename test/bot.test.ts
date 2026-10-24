@@ -119,11 +119,36 @@ describe("private results", () => {
     expect(tg.lastTextTo(anna.id)).toContain("Only the regular daily Size It Up counts");
   });
 
-  it("answers /start with instructions", async () => {
+  it("answers /start and /help with usage and setup instructions", async () => {
     await linkGroup();
-    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, "/start"));
-    expect(tg.lastTextTo(anna.id)).toContain("How it works");
-    expect(tg.lastTextTo(anna.id)).not.toContain("not linked");
+    for (const command of ["/start", "/help"]) {
+      await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, command));
+      const help = tg.lastTextTo(anna.id);
+      expect(help).toContain("<b>Näin pelaat mukana</b>");
+      expect(help).toContain("Palkintopallit julkaistaan keskiyöllä (Europe/Helsinki).");
+      expect(help).toContain("/regressio – hajonta-analyysi");
+      expect(help).toContain("<b>Käyttöönotto ryhmässä</b>");
+      expect(help).not.toContain("En ole vielä yhdistetty");
+    }
+  });
+
+  it("shows the closing time in /help when it isn't midnight", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON, { closeTime: "22:00" }), dm(anna, "/help"));
+    expect(tg.lastTextTo(anna.id)).toContain("Palkintopallit julkaistaan klo 22:00");
+  });
+
+  it("answers /help in a group before /setup, with the setup steps", async () => {
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(ben, "/help"));
+    const help = tg.lastTextTo(GROUP);
+    expect(help).toContain("3. Ryhmän ylläpitäjä lähettää ryhmään /setup.");
+    expect(help).toContain("En ole vielä yhdistetty ryhmään");
+    expect(tg.sentTo(GROUP)[0]!.params.reply_parameters).toBeDefined();
+
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(ben, "/help@PodiumTestBot"));
+    expect(tg.lastTextTo(GROUP)).toContain("<b>Käyttöönotto ryhmässä</b>");
+    expect(tg.lastTextTo(GROUP)).not.toContain("En ole vielä yhdistetty");
   });
 
   it("counts only the first result per game and day", async () => {

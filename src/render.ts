@@ -194,22 +194,40 @@ export function renderPlayerStats(name: string, stats: StatsRow[]): string {
   return lines.join("\n");
 }
 
+/** /help and /start: how to take part, the rules, the commands and how to set the bot up in a group. */
 export function renderHelp(opts: { closeTime: string; timeZone: string; linked: boolean }): string {
+  const closes = opts.closeTime === "00:00" ? "keskiyöllä" : `klo ${opts.closeTime}`;
   const lines = [
-    "👋 I collect the daily results for <b>Eraly</b>, <b>Krillion</b> and <b>Size It Up</b> and post podiums every day.",
+    "👋 Kerään <b>Eralyn</b>, <b>Krillionin</b> ja <b>Size It Upin</b> päivän tulokset ja julkaisen palkintopallit joka päivä.",
     "",
-    "<b>How it works</b>",
-    "1. Play the daily games: eraly.io, krillion.io and magnitudle.com/size-it-up",
-    "2. Tap <b>Share</b> at the end of a game and paste the result in the group, or send it to me in a private chat if you'd rather keep your score to yourself until the podium. You can send all three in one message.",
-    `3. The group's board shows who has played, and the podiums are posted at ${closeLabel(opts.closeTime)} (${escapeHtml(opts.timeZone)} time).`,
+    "<b>Näin pelaat mukana</b>",
+    "1. Pelaa päivän pelit: eraly.io, krillion.io ja magnitudle.com/size-it-up",
+    "2. Paina pelin lopussa <b>Share</b> ja liitä tulos ryhmään. Saat 👍-reaktion, kun tulos on tallessa.",
+    "3. Jos et halua näyttää pisteitäsi ennen palkintojenjakoa, lähetä tulos minulle yksityisviestillä. Avaa minut ja paina ensin <b>Start</b>.",
+    "4. Kaikki kolme tulosta voi lähettää samassa viestissä.",
+    `5. Ryhmän taulusta näkee, kuka on jo pelannut. Palkintopallit julkaistaan ${closes} (${escapeHtml(opts.timeZone)}).`,
     "",
-    "Only your first result for each game counts. Unlimited, archive and themed modes don't count.",
+    "<b>Säännöt</b>",
+    "• Vain päivän pelit lasketaan, eivät Unlimited-, arkisto- tai teemapelit eivätkä Size It Upin Pop Culture tai Geography.",
+    "• Vain ensimmäinen tulos kustakin pelistä lasketaan.",
+    "• Size It Upin tuloksessa ei ole pelinumeroa, joten se lasketaan sille päivälle, jona lähetät sen.",
+    "• Kokonaispisteet: jokainen peli prosentteina maksimistaan, yhteensä enintään 300. Pelaamatta jäänyt peli on 0.",
     "",
-    "<b>Commands</b>",
-    "/today – today's board",
-    "/me – your stats",
-    "/leaderboard – all-time standings",
+    "<b>Komennot</b>",
+    "/today – päivän taulu",
+    "/me – omat tilastosi",
+    "/leaderboard – kaikkien aikojen tilanne",
+    "/regressio – hajonta-analyysi: ilman nimeä kärjestä, nimen kanssa siitä pelaajasta, tai vastauksena viestiin sen tuloksesta",
+    "/help – tämä ohje",
+    "",
+    "<b>Käyttöönotto ryhmässä</b>",
+    "1. Lisää minut ryhmään.",
+    "2. Tee minusta ryhmän ylläpitäjä, jotta näen ryhmään liitetyt tulokset. Erikoisoikeuksia ei tarvita.",
+    "3. Ryhmän ylläpitäjä lähettää ryhmään /setup.",
+    "4. Jokainen, joka haluaa lähettää tuloksia yksityisesti, avaa minut ja painaa <b>Start</b>.",
+    "",
+    "Oman botin pystytys (BotFather ja Cloudflare): ohjeet ovat README:ssä osoitteessa github.com/pukseli/dailybotti",
   ];
-  if (!opts.linked) lines.push("", "⚠️ I'm not linked to a group yet. A group admin needs to add me to the group and send /setup there.");
+  if (!opts.linked) lines.push("", "⚠️ En ole vielä yhdistetty ryhmään. Ryhmän ylläpitäjän pitää lisätä minut ryhmään ja lähettää siellä /setup.");
   return lines.join("\n");
 }
