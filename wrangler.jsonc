@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "daily-games-bot",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  // Every minute: post the podium once a day has closed, and keep today's board up to date.
+  "triggers": { "crons": ["* * * * *"] },
+  "vars": {
+    // The group's timezone. Days, puzzle numbers and closing time all follow it.
+    "TIMEZONE": "Europe/Helsinki",
+    // When a day's results close and the podium is posted (24h clock, local time). "00:00" means midnight.
+    "CLOSE_TIME": "00:00"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "daily-games-bot",
+      // Replace with the id printed by `npx wrangler d1 create daily-games-bot`.
+      "database_id": "REPLACE_WITH_YOUR_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "observability": { "enabled": true }
+}
