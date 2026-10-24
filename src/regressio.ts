@@ -299,11 +299,21 @@ Kirjoita analyysi vaaditussa 3 rivin formaatissa (KARSINTA, JOHTOPÄÄTÖS, LAUS
     });
 
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("AI timeout")), 2500),
+      setTimeout(() => reject(new Error("AI timeout")), 8500),
     );
 
     const res: any = await Promise.race([aiPromise, timeoutPromise]);
-    const text = typeof res?.response === "string" ? res.response.trim() : "";
+    let text = "";
+    if (typeof res?.response === "string") {
+      text = res.response;
+    } else if (typeof res?.result?.response === "string") {
+      text = res.result.response;
+    } else if (typeof res?.choices?.[0]?.message?.content === "string") {
+      text = res.choices[0].message.content;
+    } else if (typeof res === "string") {
+      text = res;
+    }
+    text = text.trim();
     if (text.length > 5) {
       return parseExplanation(text);
     }

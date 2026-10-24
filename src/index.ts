@@ -127,6 +127,34 @@ export default {
       return init(request, env);
     }
 
+    if (url.pathname === "/test-ai") {
+      if (!env.AI) return new Response("env.AI missing", { status: 500 });
+      const start = Date.now();
+      try {
+        const res = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+          messages: [
+            { role: "system", content: "Olet avustaja. Vastaa yhdellä sanalla." },
+            { role: "user", content: "Toimiiko?" },
+          ],
+          max_tokens: 20,
+        });
+        return Response.json({
+          status: "ok",
+          durationMs: Date.now() - start,
+          raw: res,
+        });
+      } catch (err) {
+        return Response.json(
+          {
+            status: "error",
+            durationMs: Date.now() - start,
+            error: err instanceof Error ? err.message : String(err),
+          },
+          { status: 500 },
+        );
+      }
+    }
+
     if (url.pathname === "/") return new Response("Daily games bot is running.");
     return new Response("not found", { status: 404 });
   },
