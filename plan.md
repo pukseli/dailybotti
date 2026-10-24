@@ -1,9 +1,9 @@
 # Friend-Rank Bot — Concept: Consistent Share Parser
 
 Four friends play three daily browser games: **Magnitudle: Size It Up**, **Krillion** (the daily dive), and **Eraly**. The
-group wants a Telegram-bot share-format workflow: friends paste each game's share text into the Telegram group, the bot
-parses it, and reports how the four friends rank against each other. This creates hype and gives an easy push trigger,
-replacing timed leaderboard polling.
+group wants a Telegram-bot share-format workflow: friends paste each game's share text into the Telegram group or send it
+privately to the bot, the bot parses it, and reports how the four friends rank against each other. Group pastes create
+hype and give an easy push trigger, replacing timed leaderboard polling.
 
 ## 1. The three share formats
 
@@ -78,8 +78,19 @@ local paste date. Eraly: `#N` from the header; paste date as fallback.
 
 ## 3. Push-trigger flow
 
-Bot is a group member (privacy mode off) or friends DM it. On a valid paste: instant short confirmation with the parsed
-score. `/standings` (or auto-reply once all four have pasted a game) posts the four-way comparison for that game. No
+Results can be pasted in two places, and both count the same:
+
+- **In the Telegram group.** The paste stays visible to everyone, which is what creates the hype. The bot needs to see
+  group messages, so it is an admin (no special rights needed) or has privacy mode turned off. It confirms a valid paste
+  with a 👍 reaction instead of a reply, so the chat doesn't fill up with bot messages. It replies only when a result
+  can't be counted: a repeated result, a closed day, or a non-daily mode.
+- **Privately to the bot.** For anyone who'd rather keep their score to themselves until the standings are out. The bot
+  replies privately with the parsed score and the games still left that day. Each friend presses Start in the bot chat
+  once, because Telegram bots can't message people first.
+
+Either way, identity comes from the Telegram sender (section 2, point 3) and the result goes into the same store.
+
+`/standings` (or auto-reply once all four have pasted a game) posts the four-way comparison for that game. No
 scheduled jobs anywhere in the design.
 
 ## 4. Format comparison

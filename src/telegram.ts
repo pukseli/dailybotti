@@ -6,6 +6,8 @@ export interface User {
   first_name: string;
   last_name?: string;
   username?: string;
+  /** Only in getMe: true when privacy mode is off, so the bot sees every group message. */
+  can_read_all_group_messages?: boolean;
 }
 
 export interface Chat {
@@ -34,7 +36,6 @@ export interface Update {
 export interface ChatMember {
   status: "creator" | "administrator" | "member" | "restricted" | "left" | "kicked";
   is_member?: boolean;
-  can_delete_messages?: boolean;
 }
 
 export class TelegramError extends Error {

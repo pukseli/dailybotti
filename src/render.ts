@@ -81,7 +81,7 @@ export function renderBoard(opts: {
     lines.push("Final results are posted below.");
   } else {
     const bot = opts.botUsername ? `@${escapeHtml(opts.botUsername)}` : "me";
-    lines.push(`Scores stay hidden until ${closeLabel(opts.closeTime)}. Send your results to ${bot} in a private chat.`);
+    lines.push(`Paste your results here or send them privately to ${bot}. Podiums at ${closeLabel(opts.closeTime)}.`);
   }
   return fit(lines);
 }
@@ -160,8 +160,8 @@ export function renderHelp(opts: { closeTime: string; timeZone: string; linked: 
     "",
     "<b>How it works</b>",
     "1. Play the daily games: eraly.io, krillion.io and magnitudle.com/size-it-up",
-    "2. Tap <b>Share</b> at the end of a game and send the result to me in this private chat. On a computer, paste it here. You can send all three in one message.",
-    `3. The group sees who has played, and the scores and podiums are revealed at ${closeLabel(opts.closeTime)} (${escapeHtml(opts.timeZone)} time).`,
+    "2. Tap <b>Share</b> at the end of a game and paste the result in the group, or send it to me in a private chat if you'd rather keep your score to yourself until the podium. You can send all three in one message.",
+    `3. The group's board shows who has played, and the podiums are posted at ${closeLabel(opts.closeTime)} (${escapeHtml(opts.timeZone)} time).`,
     "",
     "Only your first result for each game counts. Unlimited, archive and themed modes don't count.",
     "",

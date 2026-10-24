@@ -2,8 +2,9 @@
 
 A Telegram bot for a group that plays [Eraly](https://eraly.io/), [Krillion](https://krillion.io/) and [Size It Up](https://magnitudle.com/size-it-up) every day.
 
-- Players send their results to the bot **in a private chat**, so the group isn't flooded with results.
-- The group gets one **board** per day, edited in place, showing who has played (✅). Scores stay hidden.
+- Players **paste their results in the group**, or **send them to the bot privately** if they'd rather keep their score to themselves until the podium.
+- Group pastes get a 👍 reaction instead of a reply, so the bot doesn't fill the chat with its own messages.
+- The group gets one **board** per day, edited in place, showing who has played (✅). The board shows no scores.
 - When the day closes (midnight by default), the bot posts the **podiums**: one per game plus an overall one.
 - `/leaderboard` shows all-time medals and averages. `/me` shows your own stats.
 
@@ -80,17 +81,17 @@ Every line should start with ✅. If one starts with ❌, it says what to fix.
 ### 7. Add the bot to the group
 
 1. Add the bot to your Telegram group.
-2. Make it an **admin**. It only needs the **Delete messages** right. As an admin it can also pick up results people post in the group, and delete them to keep the chat tidy.
-3. In the group, send `/setup`. It must be sent by a group admin.
+2. Make it an **admin**. It doesn't need any special rights, so you can untick them all. Telegram only lets a bot see ordinary group messages, like pasted results, when it's an admin.
+3. In the group, send `/setup`. It must be sent by a group admin. If the bot still can't see group messages, its reply says so.
 
 ### 8. Tell everyone
 
-Each player opens the bot (tap its name, then **Start**) once. After that:
+At the end of each game, tap **Share**, then either:
 
-- **On a phone:** at the end of each game, tap **Share** → Telegram → the bot.
-- **On a computer:** tap **Share** (it copies the result) and paste it into the chat with the bot.
+- **paste it in the group.** The bot reacts with 👍 when it's saved, and replies only if something couldn't be counted, or
+- **send it to the bot privately.** Open the bot once and press **Start** first. The bot replies with what it saved and which games you still have left.
 
-All three results can go in one message. The bot replies privately with what it saved.
+On a phone, Share opens the share menu, so you can pick Telegram and then the group or the bot. On a computer, Share copies the result for you to paste. All three results can go in one message.
 
 ## Rules the bot follows
 

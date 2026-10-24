@@ -99,16 +99,6 @@ async function tryCall(ctx: Ctx, method: string, params: Record<string, unknown>
   }
 }
 
-async function botId(ctx: Ctx, settings: Settings): Promise<number> {
-  if (settings.botId) return settings.botId;
-  const me = await ctx.tg.call<User>("getMe", {});
-  await setSetting(ctx.db, "bot_id", me.id);
-  if (me.username) await setSetting(ctx.db, "bot_username", me.username);
-  settings.botId = me.id;
-  settings.botUsername = me.username ?? null;
-  return me.id;
-}
-
 // ---------- updates ----------
 
 type ParsedCommand = { kind: "none" } | { kind: "other-bot" } | { kind: "command"; name: string };
@@ -224,19 +214,23 @@ async function setup(ctx: Ctx, msg: Message, settings: Settings): Promise<void> 
   await setSetting(ctx.db, "group_chat_id", msg.chat.id);
   await setSetting(ctx.db, "group_thread_id", msg.is_topic_message ? (msg.message_thread_id ?? null) : null);
 
-  const me = await ctx.tg.call<ChatMember>("getChatMember", { chat_id: msg.chat.id, user_id: await botId(ctx, settings) });
-  const canDelete = me.status === "administrator" && me.can_delete_messages === true;
-  const bot = settings.botUsername ? `@${settings.botUsername}` : "me";
+  // The bot sees ordinary group messages only as an admin, or with privacy mode turned off in BotFather.
+  const me = await ctx.tg.call<User>("getMe", {});
+  await setSetting(ctx.db, "bot_id", me.id);
+  if (me.username) await setSetting(ctx.db, "bot_username", me.username);
+  const member = await ctx.tg.call<ChatMember>("getChatMember", { chat_id: msg.chat.id, user_id: me.id });
+  const seesGroupMessages = member.status === "administrator" || me.can_read_all_group_messages === true;
+  const bot = me.username ? `@${me.username}` : "me";
   const lines = [
     "✅ <b>Linked to this group.</b>",
     "",
-    `Everyone: open ${bot}, press <b>Start</b>, and send your Eraly, Krillion and Size It Up results there.`,
-    `I'll show who has played on a board here, and post the podiums at ${closeLabel(ctx.closeTime)}.`,
+    `Paste your Eraly, Krillion and Size It Up results here, or send them to ${bot} in a private chat (press <b>Start</b> there first) if you'd rather keep your score to yourself until the podium.`,
+    `I'll keep a board of who has played, and post the podiums at ${closeLabel(ctx.closeTime)}.`,
   ];
-  if (!canDelete) {
+  if (!seesGroupMessages) {
     lines.push(
       "",
-      "⚠️ Please make me an admin with the <b>Delete messages</b> right. Then I can also pick up results posted here and remove them to keep the chat tidy.",
+      "⚠️ I can't see messages posted here yet, so results pasted in the group would be missed. Please make me an admin of this group (I don't need any special rights).",
     );
   }
   await reply(ctx, msg, lines.join("\n"));
@@ -281,7 +275,8 @@ async function privateResults(ctx: Ctx, msg: Message, user: User, text: string, 
     return;
   }
   const outcome = await recordResults(ctx, user, parsed.results);
-  await reply(ctx, msg, [...outcome.lines, ...parsed.rejected].join("\n"));
+  const status = outcome.status ? ["", outcome.status] : [];
+  await reply(ctx, msg, [...outcome.saved, ...outcome.problems, ...parsed.rejected, ...status].join("\n"));
   await refreshBoardSafely(ctx, settings, outcome.boardDays);
 }
 
@@ -289,27 +284,27 @@ async function groupResults(ctx: Ctx, msg: Message, user: User, text: string, se
   const parsed = parseResults(text);
   if (parsed.results.length === 0) return; // ordinary chat
   const outcome = await recordResults(ctx, user, parsed.results);
-  const confirmation = [...outcome.lines, ...parsed.rejected].join("\n");
 
-  // Confirm privately and remove the result from the group. If they haven't started a private chat with
-  // the bot, it can't message them, so leave their message and answer in the group instead.
-  const dmSent = await tryCall(ctx, "sendMessage", {
-    chat_id: user.id,
-    text: confirmation,
-    parse_mode: "HTML",
-    link_preview_options: { is_disabled: true },
-  });
-  if (dmSent) {
-    await tryCall(ctx, "deleteMessage", { chat_id: msg.chat.id, message_id: msg.message_id });
-  } else {
-    const bot = settings.botUsername ? `@${settings.botUsername}` : "me";
-    await reply(ctx, msg, `${confirmation}\n\nTip: send results to ${bot} in a private chat (press Start there first) to keep the group tidy.`);
-  }
+  // The paste stays in the group for everyone to see. A 👍 reaction confirms it was saved, so the bot adds
+  // no messages of its own; it only replies when something needs explaining, like a late or repeated result.
+  const issues = [...outcome.problems, ...parsed.rejected];
+  const reacted =
+    issues.length === 0 &&
+    (await tryCall(ctx, "setMessageReaction", {
+      chat_id: msg.chat.id,
+      message_id: msg.message_id,
+      reaction: [{ type: "emoji", emoji: "👍" }],
+    }));
+  if (!reacted) await reply(ctx, msg, [...outcome.saved, ...issues].join("\n"));
   await refreshBoardSafely(ctx, settings, outcome.boardDays);
 }
 
 interface RecordOutcome {
-  lines: string[];
+  saved: string[];
+  /** Results that were not counted, with the reason. */
+  problems: string[];
+  /** Which of today's games the player still has to play, while today is open. */
+  status: string | null;
   /** Days whose board needs updating. */
   boardDays: string[];
 }
@@ -318,7 +313,8 @@ async function recordResults(ctx: Ctx, user: User, results: ParsedResult[]): Pro
   const nowIso = ctx.now.toISOString();
   const day0 = today(ctx);
   await upsertPlayer(ctx.db, user, nowIso);
-  const lines: string[] = [];
+  const saved: string[] = [];
+  const problems: string[] = [];
   const boardDays = new Set<string>();
 
   for (const r of results) {
@@ -327,15 +323,15 @@ async function recordResults(ctx: Ctx, user: User, results: ParsedResult[]): Pro
     const title = r.puzzle !== null ? `${game.name} #${r.puzzle}` : game.name;
 
     if (day > addDays(day0, 1)) {
-      lines.push(`⛔ ${title} isn't out yet, so I can't count it.`);
+      problems.push(`⛔ ${title} isn't out yet, so I can't count it.`);
       continue;
     }
     if (dayIsClosed(ctx, day) || (await getDay(ctx.db, day))?.finalized_at) {
-      lines.push(`⛔ ${title} is for ${dayLabel(day)}, which has already closed.`);
+      problems.push(`⛔ ${title} is for ${dayLabel(day)}, which has already closed.`);
       continue;
     }
     await ensureDay(ctx.db, day);
-    const saved = await insertResult(ctx.db, {
+    const inserted = await insertResult(ctx.db, {
       player_id: user.id,
       game: r.game,
       day,
@@ -344,30 +340,29 @@ async function recordResults(ctx: Ctx, user: User, results: ParsedResult[]): Pro
       max_score: game.max,
       submitted_at: nowIso,
     });
-    if (saved) {
-      lines.push(`✅ ${title}: ${r.score}/${game.max} saved${day === day0 ? "" : ` for ${dayLabel(day)}`}.`);
+    if (inserted) {
+      saved.push(`✅ ${title}: ${r.score}/${game.max} saved${day === day0 ? "" : ` for ${dayLabel(day)}`}.`);
       if (day === day0) boardDays.add(day);
+      continue;
+    }
+    const existing = await getResult(ctx.db, user.id, r.game, day);
+    if (existing?.score === r.score) {
+      saved.push(`☑️ ${title} was already saved (${r.score}/${game.max}).`);
     } else {
-      const existing = await getResult(ctx.db, user.id, r.game, day);
-      lines.push(
-        existing?.score === r.score
-          ? `☑️ ${title} was already saved (${r.score}/${game.max}).`
-          : `ℹ️ You already sent ${title} (${existing?.score}/${game.max}). Only the first result counts.`,
-      );
+      problems.push(`ℹ️ You already sent ${title} (${existing?.score}/${game.max}). Only the first result counts.`);
     }
   }
 
+  let status: string | null = null;
   if (!dayIsClosed(ctx, day0)) {
     const mine = (await resultsForDay(ctx.db, day0)).filter((r) => r.player_id === user.id);
     const missing = GAMES.filter((g) => !mine.some((r) => r.game === g.id)).map((g) => g.name);
-    lines.push(
-      "",
+    status =
       missing.length === 0
-        ? `🎉 All three done for today. Scores are revealed at ${closeLabel(ctx.closeTime)}.`
-        : `Still to play today: ${missing.join(", ")}.`,
-    );
+        ? `🎉 All three done for today. Podiums at ${closeLabel(ctx.closeTime)}.`
+        : `Still to play today: ${missing.join(", ")}.`;
   }
-  return { lines, boardDays: [...boardDays] };
+  return { saved, problems, status, boardDays: [...boardDays] };
 }
 
 // ---------- board ----------

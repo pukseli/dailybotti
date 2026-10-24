@@ -50,7 +50,9 @@ export class FakeTelegram implements Telegram {
     [chris.id, "member"],
     [dan.id, "member"],
   ]);
-  botCanDelete = true;
+  /** The bot sees group messages as an admin, or when privacy mode is off. */
+  botIsAdmin = true;
+  botReadsAll = false;
   /** Users who never pressed Start, so the bot can't message them. */
   noPrivateChat = new Set<number>();
   /** One-off errors: the next matching call throws. */
@@ -70,7 +72,7 @@ export class FakeTelegram implements Telegram {
   private answer(method: string, params: Record<string, unknown>): unknown {
     switch (method) {
       case "getMe":
-        return { id: BOT_ID, is_bot: true, first_name: "Podium", username: BOT_USERNAME };
+        return { id: BOT_ID, is_bot: true, first_name: "Podium", username: BOT_USERNAME, can_read_all_group_messages: this.botReadsAll };
       case "sendMessage": {
         const chatId = params.chat_id as number;
         if (chatId > 0 && this.noPrivateChat.has(chatId)) {
@@ -79,7 +81,7 @@ export class FakeTelegram implements Telegram {
         return { message_id: this.nextMessageId++, chat: { id: chatId, type: chatId > 0 ? "private" : "supergroup" }, text: params.text };
       }
       case "getChatMember": {
-        if (params.user_id === BOT_ID) return { status: "administrator", can_delete_messages: this.botCanDelete };
+        if (params.user_id === BOT_ID) return { status: this.botIsAdmin ? "administrator" : "member" };
         return { status: this.members.get(params.user_id as number) ?? "left" };
       }
       default:

@@ -53,14 +53,23 @@ describe("/setup", () => {
 
     await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/setup@PodiumTestBot"));
     expect(tg.lastTextTo(GROUP)).toContain("Linked to this group");
-    expect(tg.lastTextTo(GROUP)).not.toContain("Delete messages");
+    expect(tg.lastTextTo(GROUP)).toContain("Paste your Eraly, Krillion and Size It Up results here, or send them to @PodiumTestBot");
+    expect(tg.lastTextTo(GROUP)).not.toContain("make me an admin");
     expect((await getSettings(env.DB)).groupChatId).toBe(GROUP);
   });
 
-  it("asks for the delete right when the bot is not allowed to delete", async () => {
-    tg.botCanDelete = false;
+  it("asks to be made admin when it can't see group messages", async () => {
+    tg.botIsAdmin = false;
     await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/setup"));
-    expect(tg.lastTextTo(GROUP)).toContain("Delete messages");
+    expect(tg.lastTextTo(GROUP)).toContain("make me an admin");
+  });
+
+  it("doesn't need to be admin when privacy mode is off", async () => {
+    tg.botIsAdmin = false;
+    tg.botReadsAll = true;
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/setup"));
+    expect(tg.lastTextTo(GROUP)).toContain("Linked to this group");
+    expect(tg.lastTextTo(GROUP)).not.toContain("make me an admin");
   });
 
   it("refuses a second group", async () => {
@@ -270,24 +279,56 @@ describe("a full day", () => {
 });
 
 describe("results posted in the group", () => {
-  it("confirms privately and removes the message", async () => {
+  it("keeps the paste and confirms with a 👍 reaction, without messaging anyone", async () => {
     await linkGroup();
-    const update = inGroup(chris, eralyShare(8, 500));
+    const update = inGroup(chris, [eralyShare(8, 500), sizeItUpShare(400)].join("\n\n"));
     await handleUpdate(makeCtx(tg, FRI_NOON), update);
-    expect(tg.lastTextTo(chris.id)).toContain("✅ Eraly #8: 500/700 saved.");
-    expect(tg.of("deleteMessage")[0]!.params).toEqual({ chat_id: GROUP, message_id: update.message!.message_id });
-    expect(tg.lastTextTo(GROUP)).toContain("✅⬜⬜ Chris"); // the board
+    expect(tg.of("setMessageReaction")[0]!.params).toEqual({
+      chat_id: GROUP,
+      message_id: update.message!.message_id,
+      reaction: [{ type: "emoji", emoji: "👍" }],
+    });
+    expect(tg.of("deleteMessage")).toHaveLength(0);
+    expect(tg.sentTo(chris.id)).toHaveLength(0);
+    const groupMessages = tg.sentTo(GROUP);
+    expect(groupMessages).toHaveLength(1); // only the board
+    expect(groupMessages[0]!.params.text).toContain("✅⬜✅ Chris");
+    const saved = await env.DB.prepare("SELECT COUNT(*) AS n FROM results WHERE player_id = ?").bind(chris.id).first<{ n: number }>();
+    expect(saved?.n).toBe(2);
   });
 
-  it("answers in the group when it can't message the player privately", async () => {
+  it("reacts again to a repeated paste of the same result", async () => {
     await linkGroup();
-    tg.noPrivateChat.add(dan.id);
-    const update = inGroup(dan, krillionShare(100, 300));
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(chris, eralyShare(8, 500)));
+    tg.clear();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(chris, eralyShare(8, 500)));
+    expect(tg.of("setMessageReaction")).toHaveLength(1);
+    expect(tg.of("sendMessage")).toHaveLength(0);
+  });
+
+  it("replies in the group when a result can't be counted", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(dan, krillionShare(100, 300)));
+    tg.clear();
+    const update = inGroup(dan, `${krillionShare(100, 650)}\n\n${eralyShare(7, 400)}\n\n${sizeItUpShare(350)}`);
     await handleUpdate(makeCtx(tg, FRI_NOON), update);
-    expect(tg.of("deleteMessage")).toHaveLength(0);
-    const answer = tg.sentTo(GROUP).find((c) => (c.params.text as string).includes("Krillion #100: 300/700 saved"));
+    expect(tg.of("setMessageReaction")).toHaveLength(0);
+    const answer = tg.sentTo(GROUP).find((c) => c.params.reply_parameters);
     expect(answer?.params.reply_parameters).toEqual({ message_id: update.message!.message_id, allow_sending_without_reply: true });
-    expect(answer?.params.text).toContain("Tip: send results to @PodiumTestBot");
+    expect(answer?.params.text).toBe(
+      [
+        "✅ Size It Up: 350/500 saved.",
+        "⛔ Eraly #7 is for Thu 22 Oct, which has already closed.",
+        "ℹ️ You already sent Krillion #100 (300/700). Only the first result counts.",
+      ].join("\n"),
+    );
+  });
+
+  it("replies instead when reactions are turned off in the group", async () => {
+    await linkGroup();
+    tg.fail("setMessageReaction", new TelegramError("setMessageReaction", 400, "Bad Request: REACTION_INVALID"));
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(dan, krillionShare(100, 300)));
+    expect(tg.sentTo(GROUP).some((c) => c.params.text === "✅ Krillion #100: 300/700 saved.")).toBe(true);
   });
 
   it("ignores ordinary chat and other groups", async () => {
