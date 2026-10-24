@@ -115,6 +115,7 @@ On a phone, Share opens the share menu, so you can pick Telegram and then the gr
 
 ## Maintenance
 
+- **Deploys are automatic:** every push to `main` runs `.github/workflows/deploy.yml`. It type-checks, runs the tests, applies any new database migrations, then deploys. It uses the repo secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. To redeploy without a push, open Actions → Deploy to Cloudflare Workers → Run workflow.
 - **Logs:** `npx wrangler tail` streams live logs. Logs are also in the Cloudflare dashboard under Workers → daily-games-bot → Logs.
 - **Change settings:** edit `wrangler.jsonc`, then run `npx wrangler deploy`.
 - **Move the bot to another group:**
