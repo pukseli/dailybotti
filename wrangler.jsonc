@@ -16,7 +16,7 @@
       "binding": "DB",
       "database_name": "daily-games-bot",
       // Replace with the id printed by `npx wrangler d1 create daily-games-bot`.
-      "database_id": "REPLACE_WITH_YOUR_DATABASE_ID",
+      "database_id": "0d15d449-8174-4853-901c-f166a7640e93",
       "migrations_dir": "migrations"
     }
   ],
