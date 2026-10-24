@@ -128,6 +128,9 @@ export default {
     }
 
     if (url.pathname === "/test-ai") {
+      if (!env.WEBHOOK_SECRET || url.searchParams.get("secret") !== env.WEBHOOK_SECRET) {
+        return new Response("forbidden", { status: 403 });
+      }
       if (!env.AI) return new Response("env.AI missing", { status: 500 });
       const start = Date.now();
       const model = url.searchParams.get("model") || undefined;

@@ -272,7 +272,7 @@ export async function generateExplanation(
   name: string,
   context: "player" | "blowout",
   details: string,
-  model: string = "@cf/meta/llama-3.1-8b-instruct-fp8",
+  model: string = "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
 ): Promise<FallbackItem> {
   if (!ai) return pickFallback();
 
@@ -295,12 +295,12 @@ Kirjoita analyysi vaaditussa 3 rivin formaatissa (KARSINTA, JOHTOPÄÄTÖS, LAUS
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: userPrompt },
       ],
-      max_tokens: 220,
+      max_tokens: 280,
       temperature: 0.75,
     });
 
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("AI timeout")), 12000),
+      setTimeout(() => reject(new Error("AI timeout")), 10000),
     );
 
     const res: any = await Promise.race([aiPromise, timeoutPromise]);
