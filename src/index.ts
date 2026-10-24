@@ -129,9 +129,10 @@ export default {
 
     if (url.pathname === "/test-ai") {
       if (!env.AI) return new Response("env.AI missing", { status: 500 });
+      const model = (url.searchParams.get("model") || "@cf/meta/llama-3.1-8b-instruct-fp8") as any;
       const start = Date.now();
       try {
-        const res = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+        const res = await env.AI.run(model, {
           messages: [
             { role: "system", content: "Olet avustaja. Vastaa yhdellä sanalla." },
             { role: "user", content: "Toimiiko?" },
@@ -140,6 +141,7 @@ export default {
         });
         return Response.json({
           status: "ok",
+          model,
           durationMs: Date.now() - start,
           raw: res,
         });
@@ -147,6 +149,7 @@ export default {
         return Response.json(
           {
             status: "error",
+            model,
             durationMs: Date.now() - start,
             error: err instanceof Error ? err.message : String(err),
           },

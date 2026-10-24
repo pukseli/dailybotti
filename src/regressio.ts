@@ -289,7 +289,7 @@ ${details}
 Kirjoita analyysi vaaditussa 3 rivin formaatissa (KARSINTA, JOHTOPÄÄTÖS, LAUSUNTO).`;
 
   try {
-    const aiPromise = ai.run("@cf/meta/llama-3.1-8b-instruct", {
+    const aiPromise = ai.run("@cf/meta/llama-3.1-8b-instruct-fp8", {
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: userPrompt },
