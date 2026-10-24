@@ -27,9 +27,12 @@ function fit(lines: string[]): string {
   return out.join("\n");
 }
 
-/** First names, with a last-name initial or username added only where two players share a first name. */
+/**
+ * The name chosen with /name, otherwise the Telegram first name. A last-name initial or username is added only
+ * where two players would show the same name.
+ */
 export function displayNames(players: PlayerRow[]): Map<number, string> {
-  const base = (p: PlayerRow) => p.first_name.trim() || p.username || `Player ${p.id}`;
+  const base = (p: PlayerRow) => p.display_name?.trim() || p.first_name.trim() || p.username || `Player ${p.id}`;
   const names = new Map<number, string>();
   const groups = new Map<string, PlayerRow[]>();
   for (const p of players) {
@@ -218,6 +221,7 @@ export function renderHelp(opts: { closeTime: string; timeZone: string; linked: 
     "/me – omat tilastosi",
     "/leaderboard – kaikkien aikojen tilanne",
     "/regressio – hajonta-analyysi: ilman nimeä kärjestä, nimen kanssa siitä pelaajasta, tai vastauksena viestiin sen tuloksesta",
+    "/name Uusi nimi – vaihda nimesi tauluun, palkintopalleille ja tilastoihin. /name reset palauttaa Telegram-nimen",
     "/help – tämä ohje",
     "",
     "<b>Käyttöönotto ryhmässä</b>",

@@ -644,3 +644,83 @@ describe("/regressio and blowout analysis", () => {
     });
   });
 });
+
+describe("/name", () => {
+  it("is only for players who have sent a result", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, "/name Karppi"));
+    expect(tg.lastTextTo(ben.id)).toContain("after your first result");
+    const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM players").first<{ n: number }>();
+    expect(count?.n).toBe(0); // no row that would hold up auto-finalize
+  });
+
+  it("shows the current name and how to change it", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, eralyShare(8, 500)));
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, "/name"));
+    expect(tg.lastTextTo(ben.id)).toContain("Your name on the board, podiums and leaderboard is <b>Ben</b>.");
+    expect(tg.lastTextTo(ben.id)).toContain("<code>/name Karppi</code>");
+  });
+
+  it("renames the player everywhere: board, podium, leaderboard and /me", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, eralyShare(8, 640)));
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, eralyShare(8, 500)));
+    tg.clear();
+
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, "/name   Karppi   the Great "));
+    expect(tg.lastTextTo(ben.id)).toBe("✅ You're now <b>Karppi the Great</b> on the board, podiums, leaderboard and stats.");
+    // Today's board is edited straight away.
+    expect(tg.of("editMessageText").at(-1)!.params.text).toContain("✅⬜⬜ Karppi the Great");
+
+    await tick(makeCtx(tg, SAT_0000));
+    const podium = groupTexts().find((t) => t.startsWith("🏁"))!;
+    expect(podium).toContain("🥈 Karppi the Great · 500");
+    expect(podium).not.toContain("Ben");
+
+    await handleUpdate(makeCtx(tg, SAT_0001), inGroup(anna, "/leaderboard"));
+    expect(tg.lastTextTo(GROUP)).toContain("2. Karppi the Great  🥇0 🥈1 🥉0");
+
+    await handleUpdate(makeCtx(tg, SAT_0001), inGroup(ben, "/me"));
+    expect(tg.lastTextTo(GROUP)).toContain("📊 <b>Karppi the Great</b> · 1 day played");
+  });
+
+  it("works in the group, with /nimi too, and /name reset goes back to the Telegram name", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(chris, eralyShare(8, 500)));
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(chris, "/nimi@PodiumTestBot Kalle"));
+    expect(tg.lastTextTo(GROUP)).toContain("You're now <b>Kalle</b>");
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(chris, "/name reset"));
+    expect(tg.lastTextTo(GROUP)).toContain("You're now <b>Chris</b>");
+  });
+
+  it("refuses a name someone else has, a too-long name and a name starting with /", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, eralyShare(8, 640)));
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, eralyShare(8, 500)));
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, "/name Karppi"));
+
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, "/name karppi"));
+    expect(tg.lastTextTo(ben.id)).toContain("Someone is already called karppi");
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, "/name ANNA"));
+    expect(tg.lastTextTo(ben.id)).toContain("Someone is already called ANNA");
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, `/name ${"x".repeat(25)}`));
+    expect(tg.lastTextTo(ben.id)).toContain("too long");
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, "/name /today"));
+    expect(tg.lastTextTo(ben.id)).toContain("can't start with /");
+
+    // 24 emoji are 24 characters, even though each is several bytes.
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, `/name ${"🦐".repeat(24)}`));
+    expect(tg.lastTextTo(ben.id)).toContain("You're now");
+    // Keeping your own name, in another case, is fine.
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, "/name KARPPI"));
+    expect(tg.lastTextTo(anna.id)).toContain("You're now <b>KARPPI</b>");
+  });
+
+  it("escapes HTML in names", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, eralyShare(8, 500)));
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, "/name <b>Boss</b>"));
+    expect(tg.lastTextTo(ben.id)).toContain("<b>&lt;b&gt;Boss&lt;/b&gt;</b>");
+  });
+});

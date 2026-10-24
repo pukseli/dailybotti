@@ -31,6 +31,7 @@ const PRIVATE_COMMANDS = [
   { command: "me", description: "Your stats" },
   { command: "leaderboard", description: "All-time standings" },
   { command: "regressio", description: "Hajonta- ja outlier-analyysi" },
+  { command: "name", description: "Change your name on the leaderboards" },
   { command: "help", description: "Käyttö- ja käyttöönotto-ohjeet" },
 ];
 
@@ -39,6 +40,7 @@ const GROUP_COMMANDS = [
   { command: "leaderboard", description: "All-time standings" },
   { command: "me", description: "Your stats" },
   { command: "regressio", description: "Hajonta- ja outlier-analyysi" },
+  { command: "name", description: "Change your name on the leaderboards" },
   { command: "setup", description: "Link the bot to this group (admins)" },
   { command: "help", description: "Käyttö- ja käyttöönotto-ohjeet" },
 ];

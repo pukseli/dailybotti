@@ -111,6 +111,7 @@ On a phone, Share opens the share menu, so you can pick Telegram and then the gr
 | `/today` | both | Today's board. In the group it moves the board to the bottom of the chat |
 | `/me` | both | Your medals, averages and bests |
 | `/leaderboard` | both | All-time standings |
+| `/name New name` (or `/nimi`) | both | Changes your name on the board, podiums, leaderboard and stats. `/name reset` goes back to your Telegram name. Available after your first result |
 | `/setup` | group | Links the bot to the group (admins only) |
 
 ## Maintenance

@@ -37,6 +37,8 @@ export interface PlayerRow {
   first_name: string;
   last_name: string | null;
   username: string | null;
+  /** Set with /name; null means use the Telegram name. */
+  display_name: string | null;
 }
 
 export async function upsertPlayer(db: D1Database, user: User, nowIso: string): Promise<void> {
@@ -50,8 +52,14 @@ export async function upsertPlayer(db: D1Database, user: User, nowIso: string): 
 }
 
 export async function allPlayers(db: D1Database): Promise<PlayerRow[]> {
-  const { results } = await db.prepare("SELECT id, first_name, last_name, username FROM players").all<PlayerRow>();
+  const { results } = await db
+    .prepare("SELECT id, first_name, last_name, username, display_name FROM players")
+    .all<PlayerRow>();
   return results;
+}
+
+export async function setDisplayName(db: D1Database, playerId: number, name: string | null): Promise<void> {
+  await db.prepare("UPDATE players SET display_name = ? WHERE id = ?").bind(name, playerId).run();
 }
 
 export interface ResultRow {

@@ -224,13 +224,23 @@ describe("scoring", () => {
 describe("names and commands", () => {
   it("adds a last-name initial only when first names clash", () => {
     const names = displayNames([
-      { id: 1, first_name: "Anna", last_name: "Korhonen", username: null },
-      { id: 2, first_name: "Anna", last_name: "Virtanen", username: null },
-      { id: 3, first_name: "Ben", last_name: null, username: null },
-      { id: 4, first_name: "Sam", last_name: "K", username: "samk" },
-      { id: 5, first_name: "Sam", last_name: "K", username: null },
+      { id: 1, first_name: "Anna", last_name: "Korhonen", username: null, display_name: null },
+      { id: 2, first_name: "Anna", last_name: "Virtanen", username: null, display_name: null },
+      { id: 3, first_name: "Ben", last_name: null, username: null, display_name: null },
+      { id: 4, first_name: "Sam", last_name: "K", username: "samk", display_name: null },
+      { id: 5, first_name: "Sam", last_name: "K", username: null, display_name: null },
     ]);
     expect([...names.values()]).toEqual(["Anna K.", "Anna V.", "Ben", "Sam (@samk)", "Sam (#5)"]);
+  });
+
+  it("prefers a name chosen with /name", () => {
+    const names = displayNames([
+      { id: 1, first_name: "Anna", last_name: "Korhonen", username: null, display_name: "Karppi" },
+      { id: 2, first_name: "Anna", last_name: "Virtanen", username: null, display_name: null },
+      { id: 3, first_name: "Ben", last_name: null, username: null, display_name: "  " },
+    ]);
+    // The other Anna no longer needs an initial, and a blank chosen name falls back to the Telegram name.
+    expect([...names.values()]).toEqual(["Karppi", "Anna", "Ben"]);
   });
 
   it("escapes HTML", () => {

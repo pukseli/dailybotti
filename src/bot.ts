@@ -13,6 +13,7 @@ import {
   resultsForDay,
   savePlacements,
   saveBoard,
+  setDisplayName,
   setSetting,
   statsForEveryone,
   statsForPlayer,
@@ -33,6 +34,7 @@ import {
 import {
   closeLabel,
   displayNames,
+  escapeHtml,
   renderBoard,
   renderHelp,
   renderLeaderboard,
@@ -339,7 +341,11 @@ async function privateCommand(ctx: Ctx, msg: Message, user: User, name: string, 
       return;
     }
     case "me":
-      await reply(ctx, msg, renderPlayerStats(user.first_name, await statsForPlayer(ctx.db, user.id)));
+      await reply(ctx, msg, renderPlayerStats(await playerName(ctx, user), await statsForPlayer(ctx.db, user.id)));
+      return;
+    case "name":
+    case "nimi":
+      await nameCommand(ctx, msg, user, msg.text ?? "", settings);
       return;
     case "leaderboard":
       await reply(ctx, msg, await leaderboardText(ctx));
@@ -375,8 +381,12 @@ async function groupCommand(ctx: Ctx, msg: Message, name: string, settings: Sett
     }
     case "me":
       if (msg.from && !msg.sender_chat) {
-        await reply(ctx, msg, renderPlayerStats(msg.from.first_name, await statsForPlayer(ctx.db, msg.from.id)));
+        await reply(ctx, msg, renderPlayerStats(await playerName(ctx, msg.from), await statsForPlayer(ctx.db, msg.from.id)));
       }
+      return;
+    case "name":
+    case "nimi":
+      if (msg.from && !msg.sender_chat) await nameCommand(ctx, msg, msg.from, msg.text ?? "", settings);
       return;
     case "leaderboard":
       await reply(ctx, msg, await leaderboardText(ctx));
@@ -427,6 +437,67 @@ async function setup(ctx: Ctx, msg: Message, settings: Settings): Promise<void> 
     );
   }
   await reply(ctx, msg, lines.join("\n"));
+}
+
+const MAX_NAME_LENGTH = 24;
+const graphemes = new Intl.Segmenter();
+
+/** The name a player is shown with: the one chosen with /name, otherwise their Telegram first name. */
+async function playerName(ctx: Ctx, user: User): Promise<string> {
+  return displayNames(await allPlayers(ctx.db)).get(user.id) ?? user.first_name;
+}
+
+/** /name New name sets the caller's own display name, /name reset goes back to the Telegram name. */
+async function nameCommand(ctx: Ctx, msg: Message, user: User, text: string, settings: Settings): Promise<void> {
+  const players = await allPlayers(ctx.db);
+  const me = players.find((p) => p.id === user.id);
+  // Only players who have sent a result: the board and auto-finalize count everyone in the players table.
+  if (!me) {
+    await reply(ctx, msg, "You'll appear on the leaderboards after your first result. Send one, then choose your name with /name.");
+    return;
+  }
+  const names = displayNames(players);
+  const current = names.get(user.id) ?? user.first_name;
+  const arg = text.replace(/^\/[A-Za-z0-9_]+(?:@[A-Za-z0-9_]+)?/, "").replace(/\s+/g, " ").trim();
+
+  if (!arg) {
+    await reply(
+      ctx,
+      msg,
+      `Your name on the board, podiums and leaderboard is <b>${escapeHtml(current)}</b>.\nChange it with /name followed by the new name, e.g. <code>/name Karppi</code>. /name reset goes back to your Telegram name.`,
+    );
+    return;
+  }
+
+  let chosen: string | null = null;
+  if (arg.toLowerCase() !== "reset") {
+    if ([...graphemes.segment(arg)].length > MAX_NAME_LENGTH) {
+      await reply(ctx, msg, `That name is too long. Keep it to ${MAX_NAME_LENGTH} characters.`);
+      return;
+    }
+    if (arg.startsWith("/")) {
+      await reply(ctx, msg, "A name can't start with /.");
+      return;
+    }
+    const taken = players.some(
+      (p) =>
+        p.id !== user.id &&
+        [names.get(p.id), p.display_name, p.first_name].some((n) => n?.trim().toLowerCase() === arg.toLowerCase()),
+    );
+    if (taken) {
+      await reply(ctx, msg, `Someone is already called ${escapeHtml(arg)}. Pick another name.`);
+      return;
+    }
+    chosen = arg;
+  }
+
+  await setDisplayName(ctx.db, user.id, chosen);
+  const updated = displayNames(await allPlayers(ctx.db)).get(user.id) ?? user.first_name;
+  await reply(ctx, msg, `✅ You're now <b>${escapeHtml(updated)}</b> on the board, podiums, leaderboard and stats.`);
+
+  // Today's board lists names, so show the new one straight away.
+  const day = today(ctx);
+  if (!dayIsClosed(ctx, day)) await refreshBoardSafely(ctx, settings, [day]);
 }
 
 async function leaderboardText(ctx: Ctx): Promise<string> {
