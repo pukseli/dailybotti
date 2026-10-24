@@ -1,4 +1,5 @@
 import { handleUpdate, tick, type Ctx } from "./bot";
+import { syncCommandMenus } from "./commands";
 import { setSetting } from "./db";
 import type { Ai } from "./regressio";
 import { createTelegram, type Update, type User } from "./telegram";
@@ -25,25 +26,6 @@ function context(env: Env): Ctx {
     closeTime: env.CLOSE_TIME === "24:00" ? "00:00" : env.CLOSE_TIME,
   };
 }
-
-const PRIVATE_COMMANDS = [
-  { command: "today", description: "Today's board" },
-  { command: "me", description: "Your stats" },
-  { command: "leaderboard", description: "All-time standings" },
-  { command: "regressio", description: "Hajonta- ja outlier-analyysi" },
-  { command: "name", description: "Change your name on the leaderboards" },
-  { command: "help", description: "Käyttö- ja käyttöönotto-ohjeet" },
-];
-
-const GROUP_COMMANDS = [
-  { command: "today", description: "Show today's board at the bottom of the chat" },
-  { command: "leaderboard", description: "All-time standings" },
-  { command: "me", description: "Your stats" },
-  { command: "regressio", description: "Hajonta- ja outlier-analyysi" },
-  { command: "name", description: "Change your name on the leaderboards" },
-  { command: "setup", description: "Link the bot to this group (admins)" },
-  { command: "help", description: "Käyttö- ja käyttöönotto-ohjeet" },
-];
 
 /** One-time setup, opened in a browser after deploying: checks the config and registers the webhook. */
 async function init(request: Request, env: Env): Promise<Response> {
@@ -82,8 +64,7 @@ async function init(request: Request, env: Env): Promise<Response> {
     });
     report.push(`✅ Webhook set to ${webhookUrl}`);
 
-    await tg.call("setMyCommands", { commands: PRIVATE_COMMANDS, scope: { type: "all_private_chats" } });
-    await tg.call("setMyCommands", { commands: GROUP_COMMANDS, scope: { type: "all_group_chats" } });
+    await syncCommandMenus(env.DB, tg, null, true);
     report.push("✅ Command menu set");
   } catch (err) {
     return fail(err instanceof Error ? err.message : String(err));

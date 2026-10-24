@@ -78,6 +78,8 @@ https://daily-games-bot.<your-subdomain>.workers.dev/init?secret=<your webhook s
 
 Every line should start with ✅. If one starts with ❌, it says what to fix.
 
+You only need this page once, when setting up a new bot. After later deploys, the bot updates Telegram's command menus by itself within a minute.
+
 ### 7. Add the bot to the group
 
 1. Add the bot to your Telegram group.
@@ -117,6 +119,7 @@ On a phone, Share opens the share menu, so you can pick Telegram and then the gr
 ## Maintenance
 
 - **Deploys are automatic:** every push to `main` runs `.github/workflows/deploy.yml`. It type-checks, runs the tests, applies any new database migrations, then deploys. It uses the repo secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. To redeploy without a push, open Actions → Deploy to Cloudflare Workers → Run workflow.
+- **Command menus:** the commands Telegram suggests when you type `/` are listed in `src/commands.ts`. After a deploy that changes them, the bot sends the new menus to Telegram within a minute.
 - **Logs:** `npx wrangler tail` streams live logs. Logs are also in the Cloudflare dashboard under Workers → daily-games-bot → Logs.
 - **Change settings:** edit `wrangler.jsonc`, then run `npx wrangler deploy`.
 - **Move the bot to another group:**

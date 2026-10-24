@@ -1,0 +1,38 @@
+import { setSetting } from "./db";
+import type { Telegram } from "./telegram";
+
+// The command menus Telegram shows when someone types "/". Change them here; the bot updates Telegram by itself.
+
+export const PRIVATE_COMMANDS = [
+  { command: "today", description: "Today's board" },
+  { command: "me", description: "Your stats" },
+  { command: "leaderboard", description: "All-time standings" },
+  { command: "regressio", description: "Hajonta- ja outlier-analyysi" },
+  { command: "name", description: "Change your name on the leaderboards" },
+  { command: "help", description: "Käyttö- ja käyttöönotto-ohjeet" },
+];
+
+export const GROUP_COMMANDS = [
+  { command: "today", description: "Show today's board at the bottom of the chat" },
+  { command: "leaderboard", description: "All-time standings" },
+  { command: "me", description: "Your stats" },
+  { command: "regressio", description: "Hajonta- ja outlier-analyysi" },
+  { command: "name", description: "Change your name on the leaderboards" },
+  { command: "setup", description: "Link the bot to this group (admins)" },
+  { command: "help", description: "Käyttö- ja käyttöönotto-ohjeet" },
+];
+
+/** Both menus as last sent to Telegram, stored in settings to spot when a deploy has changed them. */
+export const COMMAND_MENUS = JSON.stringify([PRIVATE_COMMANDS, GROUP_COMMANDS]);
+
+/**
+ * Sends the command menus to Telegram unless they're unchanged since the last time (or `force`).
+ * Runs every minute, so a deploy that changes the commands reaches Telegram within a minute.
+ */
+export async function syncCommandMenus(db: D1Database, tg: Telegram, lastSent: string | null, force = false): Promise<boolean> {
+  if (!force && lastSent === COMMAND_MENUS) return false;
+  await tg.call("setMyCommands", { commands: PRIVATE_COMMANDS, scope: { type: "all_private_chats" } });
+  await tg.call("setMyCommands", { commands: GROUP_COMMANDS, scope: { type: "all_group_chats" } });
+  await setSetting(db, "command_menus", COMMAND_MENUS);
+  return true;
+}

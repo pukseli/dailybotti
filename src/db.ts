@@ -7,6 +7,8 @@ export interface Settings {
   groupThreadId: number | null;
   botUsername: string | null;
   botId: number | null;
+  /** The command menus as last sent to Telegram (see commands.ts). */
+  commandMenus: string | null;
 }
 
 export async function getSettings(db: D1Database): Promise<Settings> {
@@ -18,6 +20,7 @@ export async function getSettings(db: D1Database): Promise<Settings> {
     groupThreadId: num("group_thread_id"),
     botUsername: map.get("bot_username") ?? null,
     botId: num("bot_id"),
+    commandMenus: map.get("command_menus") ?? null,
   };
 }
 

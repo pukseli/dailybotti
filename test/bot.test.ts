@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { handleUpdate, tick } from "../src/bot";
+import { COMMAND_MENUS, GROUP_COMMANDS, PRIVATE_COMMANDS } from "../src/commands";
 import { getSettings } from "../src/db";
 import { TelegramError } from "../src/telegram";
 import {
@@ -42,7 +43,10 @@ function groupTexts(): string[] {
 beforeEach(async () => {
   await resetDb();
   tg = new FakeTelegram();
-  await env.DB.prepare("INSERT INTO settings (key, value) VALUES ('bot_username', ?), ('bot_id', '999')").bind(BOT_USERNAME).run();
+  // Command menus start up to date, as after any deploy that didn't change them.
+  await env.DB.prepare("INSERT INTO settings (key, value) VALUES ('bot_username', ?), ('bot_id', '999'), ('command_menus', ?)")
+    .bind(BOT_USERNAME, COMMAND_MENUS)
+    .run();
 });
 
 describe("/setup", () => {
@@ -722,5 +726,38 @@ describe("/name", () => {
     await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, eralyShare(8, 500)));
     await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, "/name <b>Boss</b>"));
     expect(tg.lastTextTo(ben.id)).toContain("<b>&lt;b&gt;Boss&lt;/b&gt;</b>");
+  });
+});
+
+describe("command menus", () => {
+  const menus = () => env.DB.prepare("SELECT value FROM settings WHERE key = 'command_menus'").first<{ value: string }>();
+
+  it("updates Telegram's menus once after a deploy that changed them, even before /setup", async () => {
+    await env.DB.prepare("UPDATE settings SET value = '[]' WHERE key = 'command_menus'").run(); // the old commands
+    await tick(makeCtx(tg, FRI_NOON));
+    expect(tg.of("setMyCommands").map((c) => c.params)).toEqual([
+      { commands: PRIVATE_COMMANDS, scope: { type: "all_private_chats" } },
+      { commands: GROUP_COMMANDS, scope: { type: "all_group_chats" } },
+    ]);
+    expect((await menus())?.value).toBe(COMMAND_MENUS);
+
+    tg.clear();
+    await tick(makeCtx(tg, FRI_NOON));
+    expect(tg.calls).toEqual([]);
+  });
+
+  it("tries again next minute if Telegram fails, without holding up the podium", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, eralyShare(8, 640)));
+    await env.DB.prepare("DELETE FROM settings WHERE key = 'command_menus'").run();
+    tg.fail("setMyCommands", new TelegramError("setMyCommands", 502, "Bad Gateway"));
+    await tick(makeCtx(tg, SAT_0000));
+    expect(groupTexts().some((t) => t.startsWith("🏁"))).toBe(true);
+    expect(await menus()).toBeNull();
+
+    tg.clear();
+    await tick(makeCtx(tg, SAT_0001));
+    expect(tg.of("setMyCommands")).toHaveLength(2);
+    expect((await menus())?.value).toBe(COMMAND_MENUS);
   });
 });

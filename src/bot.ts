@@ -22,6 +22,7 @@ import {
   type ResultRow,
   type Settings,
 } from "./db";
+import { syncCommandMenus } from "./commands";
 import { GAMES, dayForResult, gameById, parseResults, parseRoundData, type ParsedResult } from "./games";
 import {
   calculateRegression,
@@ -782,6 +783,14 @@ Regressoidut pisteet: ${regressedScore.toFixed(1)} / 300`;
 /** Runs every minute: posts podiums for days that have closed, then keeps today's board in sync. */
 export async function tick(ctx: Ctx): Promise<void> {
   const settings = await getSettings(ctx.db);
+
+  // After a deploy that changed the commands, update Telegram's menus. No-op otherwise.
+  try {
+    await syncCommandMenus(ctx.db, ctx.tg, settings.commandMenus);
+  } catch (err) {
+    console.error("command menu update failed", err); // tried again next minute
+  }
+
   if (settings.groupChatId === null) return;
 
   try {
