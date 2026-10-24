@@ -55,12 +55,33 @@ export interface Ctx {
 
 const BOARD_CLAIM_MS = 60_000;
 
+export const EXPECTED_PLAYERS = 4;
+
 function today(ctx: Ctx): string {
   return localParts(ctx.now, ctx.timeZone).date;
 }
 
 function dayIsClosed(ctx: Ctx, day: string): boolean {
   return isClosed(day, ctx.now, ctx.timeZone, ctx.closeTime);
+}
+
+/**
+ * Checks whether all expected players have completed all games for the given day.
+ * Returns true if at least minPlayers (default 4) exist and every registered player has completed all games.
+ */
+export async function isDayComplete(ctx: Ctx, day: string, minPlayers = EXPECTED_PLAYERS): Promise<boolean> {
+  const [players, results] = await Promise.all([
+    allPlayers(ctx.db),
+    resultsForDay(ctx.db, day),
+  ]);
+  if (players.length < minPlayers) return false;
+
+  for (const player of players) {
+    const playerResults = results.filter((r) => r.player_id === player.id);
+    const hasAll = GAMES.every((g) => playerResults.some((r) => r.game === g.id));
+    if (!hasAll) return false;
+  }
+  return true;
 }
 
 // ---------- sending ----------
@@ -309,7 +330,8 @@ async function privateCommand(ctx: Ctx, msg: Message, user: User, name: string, 
   switch (name) {
     case "today": {
       const day = today(ctx);
-      if (dayIsClosed(ctx, day)) {
+      const row = await getDay(ctx.db, day);
+      if (dayIsClosed(ctx, day) || row?.finalized_at) {
         await reply(ctx, msg, "Today's results are closed. The next board opens at midnight.");
         return;
       }
@@ -337,13 +359,14 @@ async function groupCommand(ctx: Ctx, msg: Message, name: string, settings: Sett
   switch (name) {
     case "today": {
       const day = today(ctx);
-      if (dayIsClosed(ctx, day)) {
+      let row = await getDay(ctx.db, day);
+      if (dayIsClosed(ctx, day) || row?.finalized_at) {
         await reply(ctx, msg, "Today's results are closed. The next board opens at midnight.");
         return;
       }
       // Move the board to the bottom of the chat: delete the old one and post it again.
       await ensureDay(ctx.db, day);
-      const row = await getDay(ctx.db, day);
+      row = await getDay(ctx.db, day);
       if (row?.board_message_id) await tryCall(ctx, "deleteMessage", { chat_id: settings.groupChatId, message_id: row.board_message_id });
       await clearBoard(ctx.db, day);
       await tryCall(ctx, "deleteMessage", { chat_id: msg.chat.id, message_id: msg.message_id });
@@ -447,7 +470,13 @@ async function privateResults(ctx: Ctx, msg: Message, user: User, text: string, 
   const outcome = await recordResults(ctx, user, parsed.results, text);
   const status = outcome.status ? ["", outcome.status] : [];
   await reply(ctx, msg, [...outcome.saved, ...outcome.problems, ...parsed.rejected, ...status].join("\n"));
-  await refreshBoardSafely(ctx, settings, outcome.boardDays);
+  for (const day of outcome.boardDays) {
+    if (await isDayComplete(ctx, day)) {
+      await finalizeDay(ctx, settings, day);
+    } else {
+      await refreshBoardSafely(ctx, settings, [day]);
+    }
+  }
 }
 
 async function groupResults(ctx: Ctx, msg: Message, user: User, text: string, settings: Settings): Promise<void> {
@@ -466,7 +495,13 @@ async function groupResults(ctx: Ctx, msg: Message, user: User, text: string, se
       reaction: [{ type: "emoji", emoji: "👍" }],
     }));
   if (!reacted) await reply(ctx, msg, [...outcome.saved, ...issues].join("\n"));
-  await refreshBoardSafely(ctx, settings, outcome.boardDays);
+  for (const day of outcome.boardDays) {
+    if (await isDayComplete(ctx, day)) {
+      await finalizeDay(ctx, settings, day);
+    } else {
+      await refreshBoardSafely(ctx, settings, [day]);
+    }
+  }
 }
 
 interface RecordOutcome {
@@ -527,13 +562,18 @@ async function recordResults(ctx: Ctx, user: User, results: ParsedResult[], rawI
   }
 
   let status: string | null = null;
-  if (!dayIsClosed(ctx, day0)) {
+  const dayRow = await getDay(ctx.db, day0);
+  if (!dayIsClosed(ctx, day0) && !dayRow?.finalized_at) {
     const mine = (await resultsForDay(ctx.db, day0)).filter((r) => r.player_id === user.id);
     const missing = GAMES.filter((g) => !mine.some((r) => r.game === g.id)).map((g) => g.name);
-    status =
-      missing.length === 0
-        ? `🎉 All three done for today. Podiums at ${closeLabel(ctx.closeTime)}.`
-        : `Still to play today: ${missing.join(", ")}.`;
+    if (missing.length === 0) {
+      const complete = await isDayComplete(ctx, day0);
+      status = complete
+        ? "🎉 All three done for today! Everyone has finished — posting today's results now!"
+        : `🎉 All three done for today. Podiums at ${closeLabel(ctx.closeTime)}.`;
+    } else {
+      status = `Still to play today: ${missing.join(", ")}.`;
+    }
   }
   return { saved, problems, status, boardDays: [...boardDays] };
 }
@@ -608,6 +648,9 @@ export async function refreshBoard(ctx: Ctx, settings: Settings, day: string): P
 // ---------- daily close ----------
 
 export async function finalizeDay(ctx: Ctx, settings: Settings, day: string): Promise<void> {
+  const dayRow = await getDay(ctx.db, day);
+  if (dayRow?.finalized_at) return;
+
   const results = await resultsForDay(ctx.db, day);
   if (results.length === 0) {
     await markFinalized(ctx.db, day, ctx.now.toISOString());
@@ -672,7 +715,9 @@ export async function tick(ctx: Ctx): Promise<void> {
 
   try {
     for (const day of await openDays(ctx.db)) {
-      if (dayIsClosed(ctx, day)) await finalizeDay(ctx, settings, day);
+      if (dayIsClosed(ctx, day) || (await isDayComplete(ctx, day))) {
+        await finalizeDay(ctx, settings, day);
+      }
     }
   } catch (err) {
     // Leave the day open; the next run tries again, keeping days in order.
@@ -680,5 +725,8 @@ export async function tick(ctx: Ctx): Promise<void> {
   }
 
   const day = today(ctx);
-  if (!dayIsClosed(ctx, day)) await refreshBoardSafely(ctx, settings, [day]);
+  const dayRow = await getDay(ctx.db, day);
+  if (!dayIsClosed(ctx, day) && !dayRow?.finalized_at) {
+    await refreshBoardSafely(ctx, settings, [day]);
+  }
 }

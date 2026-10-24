@@ -595,4 +595,52 @@ describe("/regressio and blowout analysis", () => {
     expect(summary).toContain("TILASTOVALVONTA: Epäilyttävä ylivoima havaittu!");
     expect(summary).toContain("Anna oli");
   });
+
+  describe("early daily close when all 4 players finish", () => {
+    it("automatically finalizes the day immediately when the 4th player submits their last game", async () => {
+      await linkGroup();
+
+      // Anna, Ben and Chris submit all 3 games on Friday afternoon
+      for (const u of [anna, ben, chris]) {
+        await handleUpdate(makeCtx(tg, FRI_NOON), dm(u, `${eralyShare(8, 500)}\n\n${krillionShare(100, 500)}\n\n${sizeItUpShare(450)}`));
+      }
+
+      // 3 players finished, but Dan hasn't finished yet. The day is NOT finalized yet.
+      const finalizedBefore = () => env.DB.prepare("SELECT finalized_at AS f FROM days WHERE day = '2026-10-23'").first<{ f: string | null }>();
+      expect((await finalizedBefore())?.f).toBeNull();
+      expect(groupTexts().filter((t) => t.startsWith("🏁"))).toHaveLength(0);
+
+      // Dan submits game 1 and game 2
+      await handleUpdate(makeCtx(tg, FRI_EVENING), dm(dan, eralyShare(8, 400)));
+      await handleUpdate(makeCtx(tg, FRI_EVENING), dm(dan, krillionShare(100, 400)));
+      expect((await finalizedBefore())?.f).toBeNull();
+      expect(groupTexts().filter((t) => t.startsWith("🏁"))).toHaveLength(0);
+
+      // Dan submits game 3 (Size It Up) -> All 4 players have now completed all 3 games!
+      tg.clear();
+      await handleUpdate(makeCtx(tg, FRI_EVENING), dm(dan, sizeItUpShare(400)));
+
+      // Dan receives confirmation noting that everyone finished and results are being posted
+      expect(tg.lastTextTo(dan.id)).toContain("Everyone has finished — posting today's results now!");
+
+      // The podium summary was immediately posted in the group without waiting for midnight!
+      const posted = groupTexts().filter((t) => t.startsWith("🏁"));
+      expect(posted).toHaveLength(1);
+      expect(posted[0]).toContain("🏁 <b>Results · Fri 23 Oct</b>");
+      expect(posted[0]).toContain("🏆 <b>Overall</b> (out of 300)");
+
+      // The day is marked finalized in DB
+      expect((await finalizedBefore())?.f).not.toBeNull();
+
+      // /today responds that the day is closed
+      tg.clear();
+      await handleUpdate(makeCtx(tg, FRI_EVENING), inGroup(anna, "/today"));
+      expect(tg.lastTextTo(GROUP)).toContain("Today's results are closed. The next board opens at midnight.");
+
+      // Later at midnight, tick() does not re-post or crash
+      tg.clear();
+      await tick(makeCtx(tg, SAT_0000));
+      expect(groupTexts().filter((t) => t.startsWith("🏁"))).toHaveLength(0);
+    });
+  });
 });
