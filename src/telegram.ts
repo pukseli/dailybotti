@@ -25,6 +25,7 @@ export interface Message {
   chat: Chat;
   text?: string;
   caption?: string;
+  reply_to_message?: Message;
   migrate_to_chat_id?: number;
 }
 

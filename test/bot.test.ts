@@ -415,3 +415,159 @@ describe("board upkeep", () => {
     expect((await getSettings(env.DB)).groupChatId).toBe(-100777);
   });
 });
+
+describe("round breakdown storage and backwards compatibility", () => {
+  it("stores rounds_json and raw_text in D1 without changing any bot output, and supports json_each queries", async () => {
+    await linkGroup();
+    const customSizeItUp = [
+      "Size It Up",
+      "Overall Score 461",
+      "",
+      "🟥🟥🟥🟥🟥 100",
+      "🟥🟥🟥🟥⬜ 98",
+      "🟥🟥🟥🟥🟥 92",
+      "🟥🟥🟥🟥⬜ 87",
+      "🟥🟥🟥🟥🟥 84",
+      "https://magnitudle.com/size-it-up",
+    ].join("\n");
+
+    await handleUpdate(
+      makeCtx(tg, FRI_NOON),
+      dm(anna, [eralyShare(8, 640), krillionShare(100, 540), customSizeItUp].join("\n\n")),
+    );
+
+    const rows = await env.DB.prepare("SELECT game, score, rounds_json, raw_text FROM results WHERE player_id = ? ORDER BY game")
+      .bind(anna.id)
+      .all<{ game: string; score: number; rounds_json: string | null; raw_text: string | null }>();
+
+    expect(rows.results).toEqual([
+      {
+        game: "eraly",
+        score: 640,
+        rounds_json: null,
+        raw_text: eralyShare(8, 640),
+      },
+      {
+        game: "krillion",
+        score: 540,
+        rounds_json: JSON.stringify(["🫧", "🐟", "🦑", "🏮", "🌟", "⬛", "🤡"]),
+        raw_text: krillionShare(100, 540),
+      },
+      {
+        game: "sizeitup",
+        score: 461,
+        rounds_json: JSON.stringify([100, 98, 92, 87, 84]),
+        raw_text: customSizeItUp,
+      },
+    ]);
+
+    // Verify D1 SQLite json_each() can query individual rounds directly.
+    const roundQuery = await env.DB.prepare(
+      `SELECT CAST(j.key AS INTEGER) + 1 AS round_num, CAST(j.value AS INTEGER) AS round_score
+       FROM results, json_each(results.rounds_json) AS j
+       WHERE player_id = ? AND game = 'sizeitup'
+       ORDER BY round_num`,
+    )
+      .bind(anna.id)
+      .all<{ round_num: number; round_score: number }>();
+
+    expect(roundQuery.results).toEqual([
+      { round_num: 1, round_score: 100 },
+      { round_num: 2, round_score: 98 },
+      { round_num: 3, round_score: 92 },
+      { round_num: 4, round_score: 87 },
+      { round_num: 5, round_score: 84 },
+    ]);
+  });
+
+  it("works seamlessly when legacy rows in results have NULL rounds_json and raw_text", async () => {
+    await linkGroup();
+    // Simulate a legacy row inserted before migration 0002 (only the original 7 columns).
+    await env.DB.prepare("INSERT INTO days (day) VALUES ('2026-10-23')").run();
+    await env.DB.prepare("INSERT INTO players (id, first_name, created_at) VALUES (?, 'Anna', '2026-10-23T08:00:00Z')")
+      .bind(anna.id)
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO results (player_id, game, day, puzzle, score, max_score, submitted_at) VALUES (?, 'sizeitup', '2026-10-23', NULL, 410, 500, '2026-10-23T08:00:00Z')",
+    )
+      .bind(anna.id)
+      .run();
+
+    // New submission from Ben on the same day includes round data.
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, sizeItUpShare(450)));
+
+    // Close the day and verify podiums & stats work with mixed legacy + new rows.
+    await tick(makeCtx(tg, SAT_0000));
+    const summary = tg.lastTextTo(GROUP);
+    expect(summary).toContain("🥇 Ben · 450");
+    expect(summary).toContain("🥈 Anna · 410");
+  });
+});
+
+describe("/regressio and blowout analysis", () => {
+  it("replies with regression analysis in private chat", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, eralyShare(8, 700)));
+    tg.clear();
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, "/regressio"));
+    expect(tg.lastTextTo(anna.id)).toContain("REGRESSIOANALYYSI: Anna");
+    expect(tg.lastTextTo(anna.id)).toContain("Regressoitu taso:");
+  });
+
+  it("replies with regression analysis in group chat for specified user", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, eralyShare(8, 700)));
+    tg.clear();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(ben, "/regressio Anna"));
+    expect(tg.lastTextTo(GROUP)).toContain("REGRESSIOANALYYSI: Anna");
+  });
+
+  it("analyzes the leaderboard leader directly when /regressio is run without arguments", async () => {
+    await linkGroup();
+    // Anna submits 3 games, closing the day makes her the leaderboard leader
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, eralyShare(8, 700)));
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, krillionShare(100, 500)));
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, sizeItUpShare(500)));
+    await tick(makeCtx(tg, SAT_0000));
+    tg.clear();
+
+    // Now Ben calls /regressio without parameters
+    await handleUpdate(makeCtx(tg, SAT_0001), inGroup(ben, "/regressio"));
+    expect(tg.lastTextTo(GROUP)).toContain("REGRESSIOANALYYSI: Anna");
+    expect(tg.lastTextTo(GROUP)).toContain("Tulostaulukon kärjen karsinta");
+  });
+
+  it("analyzes the specific game result when /regressio is a reply to a message", async () => {
+    await linkGroup();
+    // Anna posts a result in the group
+    const pasteUpdate = inGroup(anna, eralyShare(8, 700));
+    pasteUpdate.message!.message_id = 1234;
+    await handleUpdate(makeCtx(tg, FRI_NOON), pasteUpdate);
+    tg.clear();
+
+    // Ben replies to Anna's paste with /regressio
+    const replyCommand = inGroup(ben, "/regressio");
+    replyCommand.message!.reply_to_message = pasteUpdate.message;
+    await handleUpdate(makeCtx(tg, FRI_NOON), replyCommand);
+
+    const reply = tg.lastTextTo(GROUP);
+    expect(reply).toContain("REGRESSIOANALYYSI: Anna");
+    expect(reply).toContain("Viestin pelituloksen (eraly) karsinta");
+    expect(reply).toContain("eraly (700/700)");
+  });
+
+  it("includes blowout analysis in daily podium when winner leads by > 20%", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, eralyShare(8, 700)));
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, krillionShare(100, 500)));
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, sizeItUpShare(500)));
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, eralyShare(8, 350)));
+    tg.clear();
+
+    await tick(makeCtx(tg, SAT_0000));
+    const summary = tg.lastTextTo(GROUP);
+    expect(summary).toContain("Results · Fri 23 Oct");
+    expect(summary).toContain("TILASTOVALVONTA: Epäilyttävä ylivoima havaittu!");
+    expect(summary).toContain("Anna oli");
+  });
+});

@@ -2,6 +2,7 @@
 
 import type { PlayerRow, ResultRow, StatsRow } from "./db";
 import { GAMES, gameTitle } from "./games";
+import type { BlowoutReport, RegressioReport } from "./regressio";
 import { MEDALS, placeMark, type Category, type Standing } from "./scoring";
 import { dayLabel } from "./time";
 
@@ -91,8 +92,9 @@ export function renderSummary(opts: {
   standings: Map<Category, Standing[]>;
   results: ResultRow[];
   names: Map<number, string>;
+  blowoutReport?: BlowoutReport | null;
 }): string {
-  const { day, standings, results, names } = opts;
+  const { day, standings, results, names, blowoutReport } = opts;
   const lines = [`🏁 <b>Results · ${dayLabel(day)}</b>`];
   for (const game of GAMES) {
     lines.push("", `<b>${escapeHtml(gameTitle(game, day))}</b>`);
@@ -106,7 +108,39 @@ export function renderSummary(opts: {
     const note = played < GAMES.length ? ` · ${played}/${GAMES.length} games` : "";
     lines.push(`${placeMark(s.rank)} ${nameOf(names, s.playerId)} · ${s.value.toFixed(1)}${note}`);
   }
+  if (blowoutReport) {
+    lines.push(
+      "",
+      "🚨 <b>TILASTOVALVONTA: Epäilyttävä ylivoima havaittu!</b>",
+      `Voittaja ${escapeHtml(blowoutReport.winnerName)} oli ${blowoutReport.marginPercent.toFixed(1)}% parempi kuin toiseksi tullut.`,
+      `Karsimalla päivän kovin suonenveto regressoitu tulos on ${blowoutReport.regressedScore.toFixed(1)} pistettä.`,
+      `<i>"${escapeHtml(blowoutReport.explanation)}"</i>`,
+    );
+  }
   lines.push("", "/leaderboard for all-time standings");
+  return fit(lines);
+}
+
+export function renderRegressio(report: RegressioReport): string {
+  const { playerName, stats, explanation, subtitle } = report;
+  if (stats.totalPlayed === 0) {
+    return `📊 <b>REGRESSIOANALYYSI: ${escapeHtml(playerName)}</b>\n\nEi tallennettuja pelejä. Pelaa ensin päivän pelejä, jotta tilastoja voidaan karsia.`;
+  }
+
+  const sub = subtitle ?? "[Hajontakomissio] Kun tilastoista karsitaan epärealistiset poikkeamat";
+  const lines = [
+    `📊 <b>REGRESSIOANALYYSI: ${escapeHtml(playerName)}</b>`,
+    `<i>${escapeHtml(sub)}</i>`,
+    "",
+    "📉 <b>Tilastokorjaus:</b>",
+    `• Alkuperäinen keskiarvo: ${stats.rawAverage.toFixed(1)} / 5.0 (${stats.totalPlayed} ${stats.totalPlayed === 1 ? "tulos" : "peliä"})`,
+    `• Karsitut suonenvedot: ${stats.outlierCount} kpl (${stats.outlierPuzzles.slice(0, 3).join(", ")}${stats.outlierPuzzles.length > 3 ? "..." : ""})`,
+    `• <b>Regressoitu taso:</b> ${stats.regressedAverage.toFixed(1)} / 5.0 (📉 -${stats.dropPercent.toFixed(1)}%)`,
+    `• <b>Johtopäätös:</b> Taantuu sarjan harmaaseen perusmassaan.`,
+    "",
+    "🧠 <b>Asiantuntijalausunto:</b>",
+    `<i>"${escapeHtml(explanation)}"</i>`,
+  ];
   return fit(lines);
 }
 

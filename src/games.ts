@@ -36,18 +36,31 @@ export interface ParseOutcome {
   rejected: string[];
 }
 
+export interface RoundData {
+  rounds: (number | string)[] | null;
+  rawText: string | null;
+}
+
 // "Eraly #8 · I travelled to 1450 AD\n▰▰▰▰▰▰▱▱▱▱ 420/700\nhttps://eraly.io"
 const ERALY = /Eraly\s*#\s*(\d+)[\s\S]{0,200}?(?<!\d)(\d+)\s*\/\s*700(?!\d)/;
+const ERALY_BLOCK = /Eraly\s*#\s*\d+[\s\S]{0,200}?(?<!\d)\d+\s*\/\s*700(?!\d)(?:[ \t]*\n\s*https?:\/\/eraly\.io\S*)?/;
 
 // "Krillion #100 🦐\n540\n\n🫧🐟🦑🏮🌟⬛🤡\n\nhttps://krillion.io"
 // Unlimited and archive games read "Krillion ∞ #12" / "Krillion ⟲ #12", which this deliberately doesn't match.
 const KRILLION = /Krillion[ \t]+#\s*(\d+)[^\n]*\n\s*(\d+)(?![\d.,])/;
 const KRILLION_OTHER = /Krillion[ \t]+[^\s#][^\n#]*#\s*\d+/;
+const KRILLION_BLOCK =
+  /Krillion[ \t]+#\s*\d+[^\n]*\n[ \t]*\d+(?![\d.,])(?:\n[ \t]*\n[ \t]*([^\sA-Za-z0-9]+))?(?:\n[ \t]*\n?[ \t]*https?:\/\/krillion\.(?:io|me)\S*)?/;
 
 // "Size It Up\nOverall Score 437\n\n🟥🟥🟥🟥⬜ 85\n...\nhttps://magnitudle.com/size-it-up"
 // Pop Culture, Geography, Unlimited and Archive have a longer first line and don't match.
 const SIZE_IT_UP = /(?:^|\n)[ \t]*Size It Up[ \t]*\n\s*Overall Score[ \t]*(\d+(?:[.,]\d+)?)/;
 const SIZE_IT_UP_OTHER = /Size It Up[^\n]*\S[^\n]*\n\s*Overall Score/;
+const SIZE_IT_UP_BLOCK =
+  /(?:^|\n)[ \t]*(Size It Up[ \t]*\n\s*Overall Score[ \t]*\d+(?:[.,]\d+)?(?:\n[ \t]*\n((?:[ \t]*[🟥⬜]{5}[ \t]+\d+(?:[.,]\d+)?\*?[ \t]*(?:\n|$))+))?(?:\n?[ \t]*\*[^\n]*)?(?:\n?[ \t]*https?:\/\/magnitudle\.com\/size-it-up\S*)?)/u;
+const SIZE_IT_UP_ROUND = /[🟥⬜]{5}[ \t]+(\d+(?:[.,]\d+)?)\*?/gu;
+
+const graphemeSegmenter = new Intl.Segmenter();
 
 export function parseResults(input: string): ParseOutcome {
   const text = input.replace(/\r\n?/g, "\n");
@@ -82,6 +95,34 @@ export function parseResults(input: string): ParseOutcome {
   }
 
   return { results, rejected };
+}
+
+/** Extracts the per-round breakdown and matched share block for a game. Never rejects a valid result if rounds are missing. */
+export function parseRoundData(input: string, game: GameId): RoundData {
+  const text = input.replace(/\r\n?/g, "\n");
+  if (game === "eraly") {
+    const m = ERALY_BLOCK.exec(text);
+    return { rounds: null, rawText: m ? m[0].trim() : null };
+  }
+  if (game === "krillion") {
+    const m = KRILLION_BLOCK.exec(text);
+    if (!m) return { rounds: null, rawText: null };
+    const symbols = m[1] ? [...graphemeSegmenter.segment(m[1])].map((s) => s.segment) : null;
+    return {
+      rounds: symbols && symbols.length > 0 ? symbols : null,
+      rawText: m[0].trim(),
+    };
+  }
+  const m = SIZE_IT_UP_BLOCK.exec(text);
+  if (!m) return { rounds: null, rawText: null };
+  const roundsBlock = m[2];
+  const rounds = roundsBlock
+    ? [...roundsBlock.matchAll(SIZE_IT_UP_ROUND)].map((r) => Math.round(Number(r[1]!.replace(",", "."))))
+    : null;
+  return {
+    rounds: rounds && rounds.length > 0 ? rounds : null,
+    rawText: m[1]!.trim(),
+  };
 }
 
 /** The day a result belongs to. Size It Up has no puzzle number, so it uses the day it arrived. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GAMES, dayForResult, gameTitle, parseResults, puzzleNumberFor } from "../src/games";
+import { GAMES, dayForResult, gameTitle, parseResults, parseRoundData, puzzleNumberFor } from "../src/games";
 import { displayNames, escapeHtml } from "../src/render";
 import { dayStandings, overallValue, rank } from "../src/scoring";
 import { addDays, dayLabel, isClosed, localParts } from "../src/time";
@@ -79,6 +79,64 @@ describe("parseResults", () => {
   it("ignores ordinary chat", () => {
     expect(parseResults("Who's up for Krillion tonight? I got 540 yesterday")).toEqual({ results: [], rejected: [] });
     expect(parseResults("")).toEqual({ results: [], rejected: [] });
+  });
+
+  it("extracts per-round scores and raw share blocks with parseRoundData", () => {
+    const sizeText = [
+      "Size It Up",
+      "Overall Score 461",
+      "",
+      "🟥🟥🟥🟥🟥 100",
+      "🟥🟥🟥🟥⬜ 98*",
+      "🟥🟥🟥🟥🟥 92",
+      "🟥🟥🟥🟥⬜ 87",
+      "🟥🟥🟥🟥🟥 84",
+      "* Round 2 adjusted after an answer correction",
+      "https://magnitudle.com/size-it-up",
+    ].join("\n");
+    expect(parseRoundData(sizeText, "sizeitup")).toEqual({
+      rounds: [100, 98, 92, 87, 84],
+      rawText: sizeText,
+    });
+
+    const krillText = krillionShare(100, 540);
+    expect(parseRoundData(krillText, "krillion")).toEqual({
+      rounds: ["🫧", "🐟", "🦑", "🏮", "🌟", "⬛", "🤡"],
+      rawText: krillText,
+    });
+
+    const eralyText = eralyShare(8, 420);
+    expect(parseRoundData(eralyText, "eraly")).toEqual({
+      rounds: null,
+      rawText: eralyText,
+    });
+  });
+
+  it("isolates each game's block and rounds from a combined multi-game message", () => {
+    const combined = [eralyShare(8, 640), krillionShare(100, 540), sizeItUpShare(402)].join("\n\n").replace(/\n/g, "\r\n");
+    expect(parseRoundData(combined, "eraly")).toEqual({
+      rounds: null,
+      rawText: eralyShare(8, 640),
+    });
+    expect(parseRoundData(combined, "krillion")).toEqual({
+      rounds: ["🫧", "🐟", "🦑", "🏮", "🌟", "⬛", "🤡"],
+      rawText: krillionShare(100, 540),
+    });
+    expect(parseRoundData(combined, "sizeitup")).toEqual({
+      rounds: [80, 80, 80, 80, 80],
+      rawText: sizeItUpShare(402),
+    });
+  });
+
+  it("gracefully returns null rounds when a share text has only the overall score", () => {
+    expect(parseRoundData("Size It Up\nOverall Score 437.6\n", "sizeitup")).toEqual({
+      rounds: null,
+      rawText: "Size It Up\nOverall Score 437.6",
+    });
+    expect(parseRoundData("Krillion #100 🦐\n540\n", "krillion")).toEqual({
+      rounds: null,
+      rawText: "Krillion #100 🦐\n540",
+    });
   });
 });
 

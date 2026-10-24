@@ -1,5 +1,6 @@
 import {
   allPlayers,
+  allResultsForPlayer,
   claimBoardPost,
   clearBoard,
   ensureDay,
@@ -17,9 +18,18 @@ import {
   statsForPlayer,
   upsertPlayer,
   type PlacementRow,
+  type ResultRow,
   type Settings,
 } from "./db";
-import { GAMES, dayForResult, gameById, parseResults, type ParsedResult } from "./games";
+import { GAMES, dayForResult, gameById, parseResults, parseRoundData, type ParsedResult } from "./games";
+import {
+  calculateRegression,
+  checkBlowout,
+  generateExplanation,
+  type Ai,
+  type BlowoutReport,
+  type RegressioReport,
+} from "./regressio";
 import {
   closeLabel,
   displayNames,
@@ -27,9 +37,10 @@ import {
   renderHelp,
   renderLeaderboard,
   renderPlayerStats,
+  renderRegressio,
   renderSummary,
 } from "./render";
-import { dayStandings } from "./scoring";
+import { dayStandings, overallValue } from "./scoring";
 import { isMessageGone, isNotModified, TelegramError, type ChatMember, type Message, type Telegram, type Update, type User } from "./telegram";
 import { addDays, dayLabel, isClosed, localParts } from "./time";
 
@@ -39,6 +50,7 @@ export interface Ctx {
   now: Date;
   timeZone: string;
   closeTime: string;
+  ai?: Ai;
 }
 
 const BOARD_CLAIM_MS = 60_000;
@@ -140,6 +152,137 @@ export async function handleUpdate(ctx: Ctx, update: Update): Promise<void> {
 
 // ---------- commands ----------
 
+async function findTargetPlayer(
+  db: D1Database,
+  names: Map<number, string>,
+  arg: string,
+  caller: User,
+): Promise<{ id: number; name: string; isLeader?: boolean }> {
+  const players = await allPlayers(db);
+  const cleanArg = arg.replace(/^@/, "").trim().toLowerCase();
+
+  const getLeader = async () => {
+    const stats = await statsForEveryone(db);
+    const overall = stats
+      .filter((s) => s.category === "overall")
+      .sort((a, b) => b.gold - a.gold || b.silver - a.silver || b.bronze - a.bronze || b.average - a.average);
+    if (overall.length > 0 && overall[0]) {
+      const topId = overall[0].player_id;
+      return { id: topId, name: names.get(topId) ?? `Player ${topId}`, isLeader: true };
+    }
+    return null;
+  };
+
+  if (!cleanArg || cleanArg === "kärki" || cleanArg === "karki" || cleanArg === "top") {
+    const leader = await getLeader();
+    if (leader) return leader;
+  }
+
+  if (cleanArg) {
+    const match = players.find(
+      (p) =>
+        (p.username && p.username.toLowerCase() === cleanArg) ||
+        p.first_name.toLowerCase() === cleanArg ||
+        (names.get(p.id) && names.get(p.id)!.toLowerCase() === cleanArg),
+    );
+    if (match) {
+      return { id: match.id, name: names.get(match.id) ?? match.first_name };
+    }
+  }
+
+  return { id: caller.id, name: names.get(caller.id) ?? caller.first_name };
+}
+
+async function regressioAction(ctx: Ctx, msg: Message, caller: User, text: string): Promise<void> {
+  const players = await allPlayers(ctx.db);
+  const names = displayNames(players);
+
+  // If this command is a reply to another message, check if that message has game results
+  const replyMsg = msg.reply_to_message;
+  if (replyMsg) {
+    const replyText = replyMsg.text ?? replyMsg.caption ?? "";
+    const parsed = parseResults(replyText);
+
+    if (parsed.results.length > 0) {
+      const playerName = replyMsg.from ? (names.get(replyMsg.from.id) ?? replyMsg.from.first_name) : caller.first_name;
+      const messageResults: ResultRow[] = parsed.results.map((r) => {
+        const g = gameById(r.game);
+        return {
+          player_id: replyMsg.from?.id ?? caller.id,
+          game: r.game,
+          day: today(ctx),
+          puzzle: r.puzzle,
+          score: r.score,
+          max_score: g?.max ?? (r.game === "eraly" ? 700 : r.game === "krillion" ? 100 : 500),
+          submitted_at: ctx.now.toISOString(),
+        };
+      });
+
+      const stats = calculateRegression(messageResults);
+      const details = `Viestin pelitulos: ${messageResults.map((r) => `${r.game} ${r.score}/${r.max_score}`).join(", ")}
+Alkuperäinen tulostaso: ${stats.rawAverage.toFixed(1)} / 5.0
+Karsitut tilastoharhat: ${stats.outlierCount} kpl (${stats.outlierPuzzles.join(", ")})
+Regressoitu todellinen taso: ${stats.regressedAverage.toFixed(1)} / 5.0 (pudotus -${stats.dropPercent.toFixed(1)} %)`;
+
+      const explanation = await generateExplanation(ctx.ai, playerName, "player", details);
+      const report: RegressioReport = {
+        playerName,
+        stats,
+        explanation,
+        subtitle: `[Hajontakomissio] Viestin pelituloksen (${messageResults.map((r) => r.game).join(", ")}) karsinta`,
+      };
+      await reply(ctx, msg, renderRegressio(report));
+      return;
+    }
+
+    if (replyMsg.from) {
+      const targetName = names.get(replyMsg.from.id) ?? replyMsg.from.first_name;
+      const results = await allResultsForPlayer(ctx.db, replyMsg.from.id);
+      const stats = calculateRegression(results);
+
+      let explanation = "";
+      if (stats.totalPlayed > 0) {
+        const details = `Pelatut pelit: ${stats.totalPlayed} kpl
+Alkuperäinen keskiarvo: ${stats.rawAverage.toFixed(1)} / 5.0
+Karsitut tilastoharhat: ${stats.outlierCount} kpl (${stats.outlierPuzzles.slice(0, 3).join(", ")})
+Regressoitu todellinen taso: ${stats.regressedAverage.toFixed(1)} / 5.0 (pudotus -${stats.dropPercent.toFixed(1)} %)`;
+        explanation = await generateExplanation(ctx.ai, targetName, "player", details);
+      }
+
+      const report: RegressioReport = {
+        playerName: targetName,
+        stats,
+        explanation,
+      };
+      await reply(ctx, msg, renderRegressio(report));
+      return;
+    }
+  }
+
+  // Not a reply (or replied message had no results / user)
+  const arg = text.replace(/^\/[a-zA-Z0-9_]+(@[a-zA-Z0-9_]+)?\s*/i, "").trim();
+  const target = await findTargetPlayer(ctx.db, names, arg, caller);
+  const results = await allResultsForPlayer(ctx.db, target.id);
+  const stats = calculateRegression(results);
+
+  let explanation = "";
+  if (stats.totalPlayed > 0) {
+    const details = `Pelatut pelit: ${stats.totalPlayed} kpl
+Alkuperäinen keskiarvo: ${stats.rawAverage.toFixed(1)} / 5.0
+Karsitut tilastoharhat: ${stats.outlierCount} kpl (${stats.outlierPuzzles.slice(0, 3).join(", ")})
+Regressoitu todellinen taso: ${stats.regressedAverage.toFixed(1)} / 5.0 (pudotus -${stats.dropPercent.toFixed(1)} %)`;
+    explanation = await generateExplanation(ctx.ai, target.name, "player", details);
+  }
+
+  const report: RegressioReport = {
+    playerName: target.name,
+    stats,
+    explanation,
+    subtitle: target.isLeader ? "[Hajontakomissio] Tulostaulukon kärjen karsinta" : undefined,
+  };
+  await reply(ctx, msg, renderRegressio(report));
+}
+
 async function privateCommand(ctx: Ctx, msg: Message, user: User, name: string, settings: Settings): Promise<void> {
   switch (name) {
     case "today": {
@@ -156,6 +299,9 @@ async function privateCommand(ctx: Ctx, msg: Message, user: User, name: string, 
       return;
     case "leaderboard":
       await reply(ctx, msg, await leaderboardText(ctx));
+      return;
+    case "regressio":
+      await regressioAction(ctx, msg, user, msg.text ?? msg.caption ?? "");
       return;
     case "setup":
       await reply(ctx, msg, "Send /setup in the group, not here.");
@@ -189,6 +335,11 @@ async function groupCommand(ctx: Ctx, msg: Message, name: string, settings: Sett
       return;
     case "leaderboard":
       await reply(ctx, msg, await leaderboardText(ctx));
+      return;
+    case "regressio":
+      if (msg.from && !msg.sender_chat) {
+        await regressioAction(ctx, msg, msg.from, msg.text ?? msg.caption ?? "");
+      }
       return;
     case "help":
       await reply(ctx, msg, renderHelp({ closeTime: ctx.closeTime, timeZone: ctx.timeZone, linked: true }));
@@ -274,7 +425,7 @@ async function privateResults(ctx: Ctx, msg: Message, user: User, text: string, 
     await reply(ctx, msg, "Only members of the group can take part. Join the group first, then send your results again.");
     return;
   }
-  const outcome = await recordResults(ctx, user, parsed.results);
+  const outcome = await recordResults(ctx, user, parsed.results, text);
   const status = outcome.status ? ["", outcome.status] : [];
   await reply(ctx, msg, [...outcome.saved, ...outcome.problems, ...parsed.rejected, ...status].join("\n"));
   await refreshBoardSafely(ctx, settings, outcome.boardDays);
@@ -283,7 +434,7 @@ async function privateResults(ctx: Ctx, msg: Message, user: User, text: string, 
 async function groupResults(ctx: Ctx, msg: Message, user: User, text: string, settings: Settings): Promise<void> {
   const parsed = parseResults(text);
   if (parsed.results.length === 0) return; // ordinary chat
-  const outcome = await recordResults(ctx, user, parsed.results);
+  const outcome = await recordResults(ctx, user, parsed.results, text);
 
   // The paste stays in the group for everyone to see. A 👍 reaction confirms it was saved, so the bot adds
   // no messages of its own; it only replies when something needs explaining, like a late or repeated result.
@@ -309,7 +460,7 @@ interface RecordOutcome {
   boardDays: string[];
 }
 
-async function recordResults(ctx: Ctx, user: User, results: ParsedResult[]): Promise<RecordOutcome> {
+async function recordResults(ctx: Ctx, user: User, results: ParsedResult[], rawInput = ""): Promise<RecordOutcome> {
   const nowIso = ctx.now.toISOString();
   const day0 = today(ctx);
   await upsertPlayer(ctx.db, user, nowIso);
@@ -331,6 +482,7 @@ async function recordResults(ctx: Ctx, user: User, results: ParsedResult[]): Pro
       continue;
     }
     await ensureDay(ctx.db, day);
+    const roundData = rawInput ? parseRoundData(rawInput, r.game) : { rounds: null, rawText: null };
     const inserted = await insertResult(ctx.db, {
       player_id: user.id,
       game: r.game,
@@ -339,6 +491,8 @@ async function recordResults(ctx: Ctx, user: User, results: ParsedResult[]): Pro
       score: r.score,
       max_score: game.max,
       submitted_at: nowIso,
+      rounds_json: roundData.rounds ? JSON.stringify(roundData.rounds) : null,
+      raw_text: roundData.rawText,
     });
     if (inserted) {
       saved.push(`✅ ${title}: ${r.score}/${game.max} saved${day === day0 ? "" : ` for ${dayLabel(day)}`}.`);
@@ -449,8 +603,45 @@ export async function finalizeDay(ctx: Ctx, settings: Settings, day: string): Pr
   }
   await savePlacements(ctx.db, day, placements);
 
-  const names = displayNames(await allPlayers(ctx.db));
-  await sendToGroup(ctx, settings, renderSummary({ day, standings, results, names }));
+  const players = await allPlayers(ctx.db);
+  const names = displayNames(players);
+
+  let blowoutReport: BlowoutReport | null = null;
+  const overallRows = standings.get("overall") ?? [];
+  const blowout = checkBlowout(overallRows);
+
+  if (blowout.isBlowout) {
+    const winnerName = names.get(blowout.winnerId) ?? `Player ${blowout.winnerId}`;
+    const winnerResults = results.filter((r) => r.player_id === blowout.winnerId);
+    const sorted = [...winnerResults].sort((a, b) => b.score / b.max_score - a.score / a.max_score);
+    const regressedWinnerResults = sorted.slice(1);
+    const regressedScore = overallValue(
+      regressedWinnerResults.map((r) => ({
+        playerId: r.player_id,
+        game: r.game,
+        score: r.score,
+        maxScore: r.max_score,
+      })),
+    );
+
+    const details = `Päivän pisteet: ${blowout.winnerScore.toFixed(1)} / 300
+Toiseksi tulleen pisteet: ${blowout.secondScore.toFixed(1)} / 300 (voittomarginaali: +${blowout.marginPercent.toFixed(1)} %)
+Karsittu päivän huippusuonenveto: ${sorted[0] ? `${sorted[0].game} (${sorted[0].score}/${sorted[0].max_score})` : "huippupeli"}
+Regressoidut pisteet: ${regressedScore.toFixed(1)} / 300`;
+
+    const explanation = await generateExplanation(ctx.ai, winnerName, "blowout", details);
+
+    blowoutReport = {
+      winnerName,
+      winnerScore: blowout.winnerScore,
+      secondScore: blowout.secondScore,
+      marginPercent: blowout.marginPercent,
+      regressedScore,
+      explanation,
+    };
+  }
+
+  await sendToGroup(ctx, settings, renderSummary({ day, standings, results, names, blowoutReport }));
   await markFinalized(ctx.db, day, ctx.now.toISOString());
   await refreshBoardSafely(ctx, settings, [day]); // flip the board to "closed"
 }

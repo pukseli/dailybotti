@@ -62,18 +62,32 @@ export interface ResultRow {
   score: number;
   max_score: number;
   submitted_at: string;
+  rounds_json?: string | null;
+  raw_text?: string | null;
 }
 
 /** Saves a result unless the player already has one for that game and day. Returns whether it was saved. */
 export async function insertResult(db: D1Database, r: ResultRow): Promise<boolean> {
-  const res = await db
-    .prepare(
-      `INSERT INTO results (player_id, game, day, puzzle, score, max_score, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(player_id, game, day) DO NOTHING`,
-    )
-    .bind(r.player_id, r.game, r.day, r.puzzle, r.score, r.max_score, r.submitted_at)
-    .run();
-  return res.meta.changes > 0;
+  try {
+    const res = await db
+      .prepare(
+        `INSERT INTO results (player_id, game, day, puzzle, score, max_score, submitted_at, rounds_json, raw_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(player_id, game, day) DO NOTHING`,
+      )
+      .bind(r.player_id, r.game, r.day, r.puzzle, r.score, r.max_score, r.submitted_at, r.rounds_json ?? null, r.raw_text ?? null)
+      .run();
+    return res.meta.changes > 0;
+  } catch (err) {
+    if (!(err instanceof Error) || !/no such column/i.test(err.message)) throw err;
+    const res = await db
+      .prepare(
+        `INSERT INTO results (player_id, game, day, puzzle, score, max_score, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(player_id, game, day) DO NOTHING`,
+      )
+      .bind(r.player_id, r.game, r.day, r.puzzle, r.score, r.max_score, r.submitted_at)
+      .run();
+    return res.meta.changes > 0;
+  }
 }
 
 export async function getResult(db: D1Database, playerId: number, game: GameId, day: string): Promise<ResultRow | null> {
@@ -87,6 +101,14 @@ export async function resultsForDay(db: D1Database, day: string): Promise<Result
   const { results } = await db
     .prepare("SELECT * FROM results WHERE day = ? ORDER BY submitted_at")
     .bind(day)
+    .all<ResultRow>();
+  return results;
+}
+
+export async function allResultsForPlayer(db: D1Database, playerId: number): Promise<ResultRow[]> {
+  const { results } = await db
+    .prepare("SELECT * FROM results WHERE player_id = ? ORDER BY day DESC, submitted_at DESC")
+    .bind(playerId)
     .all<ResultRow>();
   return results;
 }

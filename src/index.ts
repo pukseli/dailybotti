@@ -1,10 +1,12 @@
 import { handleUpdate, tick, type Ctx } from "./bot";
 import { setSetting } from "./db";
+import type { Ai } from "./regressio";
 import { createTelegram, type Update, type User } from "./telegram";
 import { isValidCloseTime, isValidTimeZone } from "./time";
 
 export interface Env {
   DB: D1Database;
+  AI?: Ai;
   TELEGRAM_BOT_TOKEN: string;
   WEBHOOK_SECRET: string;
   TIMEZONE: string;
@@ -16,6 +18,7 @@ export interface Env {
 function context(env: Env): Ctx {
   return {
     db: env.DB,
+    ai: env.AI,
     tg: createTelegram(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_API_BASE || undefined),
     now: new Date(),
     timeZone: env.TIMEZONE,
@@ -27,6 +30,7 @@ const PRIVATE_COMMANDS = [
   { command: "today", description: "Today's board" },
   { command: "me", description: "Your stats" },
   { command: "leaderboard", description: "All-time standings" },
+  { command: "regressio", description: "Hajonta- ja outlier-analyysi" },
   { command: "help", description: "How it works" },
 ];
 
@@ -34,6 +38,7 @@ const GROUP_COMMANDS = [
   { command: "today", description: "Show today's board at the bottom of the chat" },
   { command: "leaderboard", description: "All-time standings" },
   { command: "me", description: "Your stats" },
+  { command: "regressio", description: "Hajonta- ja outlier-analyysi" },
   { command: "setup", description: "Link the bot to this group (admins)" },
 ];
 
