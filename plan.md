@@ -17,7 +17,11 @@ Krillion #93 🦐
 ```
 
 - Header: daily number + 🦐; bare score line; blank line; one whitespace-free emoji row of exactly 7 symbols.
-- Symbol point values: ⬛=0, 🫧=10, 🐟=30, 🦑=60, 🏮=85.
+- Symbol point values: ⬛ Miss=0, 🫧 Plankton=10, 🤡 Too Clever=15, 🐟 Schooler=30, 🦑 Rare=60, 🏮 Deep Cut=85,
+  🌟 One in a Krillion=100.
+  - ⬛ 🫧 🐟 🦑 🏮 are verified: Krill-Bot's `ROUND_POINTS` and its real game samples sum exactly.
+  - 🤡 and 🌟 are **unconfirmed**. They come from the fan site krillion.wiki (guides/krillion-emoji-meanings), not the
+    game or Krill-Bot, which has no entry for them. Confirm with a real share that contains one.
 - Score can be cross-checked against the symbol sum.
 - Reference implementation: `Krill-Bot` (github.com/TheScottBot/Krill-Bot, MIT) — `result_grammar.py`.
 
@@ -68,7 +72,7 @@ layers are game-agnostic. Adding a game means adding one grammar file.
 3. **Identity comes from the sender, never the text.** The record binds to the Telegram `from_user`; a config maps the
 four Telegram users to their game identities. Kills all name-matching problems.
 4. **Per-game cross-validation:**
-   - Krillion: score = recognised-symbol sum when the row is fully recognised ({0, 10, 30, 60, 85}).
+   - Krillion: score = recognised-symbol sum when the row is fully recognised ({0, 10, 15, 30, 60, 85, 100}).
    - Magnitudle: square count = `round(score/20)`; the five round scores sum to the overall score (≤500).
    - Eraly: total = sum of the 7 tier values ({0, 10, 30, 60, 85, 100}), bounded 0–700.
    - Mismatches accepted but flagged — game updates never break logging.

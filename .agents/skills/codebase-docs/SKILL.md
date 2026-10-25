@@ -126,12 +126,15 @@ All parsing logic lives in [`src/games.ts`](file:///c:/Users/akseli/git/dailybot
 - **Regex:** `Eraly\s*#\s*(\d+)[\s\S]{0,200}?(?<!\d)(\d+)\s*\/\s*700(?!\d)`
 
 ### 2. Krillion (`krillion`)
-- **Max Score:** 700 (sum of 7-symbol marine dive row: ⬛=0, 🫧=10, 🐟=30, 🦑=60, 🏮=85).
+- **Max Score:** 700 (sum of the 7-symbol dive row, one symbol per round).
+- **Symbols:** ⬛ Miss=0, 🫧 Plankton=10, 🤡 Too Clever=15, 🐟 Schooler=30, 🦑 Rare=60, 🏮 Deep Cut=85,
+  🌟 One in a Krillion=100. The first five are verified against Krill-Bot (`krillbot/result_grammar.py`) and real
+  shares. 🤡 and 🌟 come only from the fan site krillion.wiki and are unconfirmed.
 - **Puzzle Numbering:** `#N` from anchor `2026-07-16` (midnight New York time).
 - **Share Format:**
   ```text
   Krillion #100 🦐
-  540
+  300
 
   🫧🐟🦑🏮🌟⬛🤡
   https://krillion.io
