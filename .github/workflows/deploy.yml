@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+    # The dashboard is its own Python project and doesn't change the bot.
+    paths-ignore:
+      - "dashboard/**"
   workflow_dispatch:
 
 # Two quick pushes deploy one after the other, never at the same time.

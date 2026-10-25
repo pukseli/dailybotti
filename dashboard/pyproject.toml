@@ -1,0 +1,10 @@
+[project]
+name = "dailybotti-dashboard"
+version = "0.1.0"
+description = "Scoreboard dashboard for the daily games bot"
+requires-python = ">=3.12"
+dependencies = [
+    "altair>=5.4",
+    "marimo>=0.23",
+    "polars>=1.20",
+]

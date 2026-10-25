@@ -1,0 +1,6 @@
+# Snapshots hold the group's data and are built fresh on every deploy. Never commit them.
+public/
+# Export output
+site/
+.venv/
+__marimo__/
