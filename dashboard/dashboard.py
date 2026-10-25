@@ -21,6 +21,8 @@ def _(mo):
     # Mirrors src/games.ts, in the order the bot lists games.
     GAMES = {"eraly": "Eraly", "krillion": "Krillion", "sizeitup": "Size It Up"}
     CATEGORIES = {"Overall": "overall", **{name: game for game, name in GAMES.items()}}
+    # The group's timezone, as in wrangler.jsonc. Days and hours on the dashboard follow it.
+    TIMEZONE = "Europe/Helsinki"
 
     # Categorical slots in fixed order, stepped separately for light and dark surfaces.
     # Players past the eighth share a neutral gray rather than getting a generated hue.
@@ -42,15 +44,16 @@ def _(mo):
             .configure_legend(labelColor=OTHER, titleColor=OTHER, orient="top")
         )
 
-    return CATEGORIES, DARK, GAMES, INK, OTHER, PALETTE, RULE, style
+    return CATEGORIES, DARK, GAMES, INK, OTHER, PALETTE, RULE, TIMEZONE, style
 
 
 @app.cell
-def _(GAMES, OTHER, PALETTE, alt, mo, pl):
+def _(GAMES, OTHER, PALETTE, TIMEZONE, alt, mo, pl):
     # Written by snapshot.py (real data) or sample_data.py (made up). Read over HTTP when exported to WASM.
     _data = mo.notebook_location() / "public"
     meta = pl.read_csv(str(_data / "meta.csv")).row(0, named=True)
-    _results = pl.read_csv(str(_data / "results.csv"), try_parse_dates=True)
+    # submitted_at is UTC (the bot writes toISOString()); parsed explicitly so both "Z" and "+00:00" work.
+    _results = pl.read_csv(str(_data / "results.csv"), try_parse_dates=True, schema_overrides={"submitted_at": pl.String})
     _placements = pl.read_csv(str(_data / "placements.csv"), try_parse_dates=True)
 
     # Players are labelled by their chosen name; two people with the same name get their number too.
@@ -66,7 +69,11 @@ def _(GAMES, OTHER, PALETTE, alt, mo, pl):
     )
     _who = players.select("player", "who")
     _game_names = pl.col("game").replace_strict(GAMES, default=pl.col("game"))
-    results = _results.join(_who, on="player").with_columns(game_name=_game_names, pct=pl.col("score") / pl.col("max_score") * 100)
+    results = _results.join(_who, on="player").with_columns(
+        game_name=_game_names,
+        pct=pl.col("score") / pl.col("max_score") * 100,
+        hour=pl.col("submitted_at").str.to_datetime(time_zone="UTC").dt.convert_time_zone(TIMEZONE).dt.hour(),
+    )
     placements = _placements.join(_who, on="player")
 
     # Colour follows the player, never the filter: every chart uses this one scale over everyone.
@@ -378,6 +385,51 @@ def _(
             gt.style.text(color=_colors[_w], size="17px"), gt.loc.body(columns=_cs)
         )
     _table
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md("""
+    ## Play patterns
+    When everyone posts each game, by hour in Helsinki time. Darker means a bigger share of that player's plays of that game.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(GAMES, alt, period_results, pl, player_scale, style):
+    # Each row is one player's plays of one game, split by local hour; shares make occasional players comparable.
+    _hours = (
+        period_results.group_by("who", "game_name", "hour")
+        .len(name="plays")
+        .with_columns(share=(pl.col("plays") / pl.col("plays").sum().over("who", "game_name") * 100).round(0))
+        .with_columns(slot=pl.format("{}:00–{}:00", pl.col("hour").cast(pl.String).str.zfill(2), ((pl.col("hour") + 1) % 24).cast(pl.String).str.zfill(2)))
+    )
+    _patterns = (
+        alt.Chart(_hours)
+        .mark_rect(cornerRadius=2)
+        .encode(
+            x=alt.X(
+                "hour:O",
+                title=None,
+                scale=alt.Scale(domain=list(range(24)), paddingInner=0.12),
+                axis=alt.Axis(labelAngle=0, labelExpr="datum.value % 6 == 0 ? datum.value + ':00' : ''", ticks=False),
+            ),
+            y=alt.Y("game_name:N", title=None, sort=list(GAMES.values()), scale=alt.Scale(paddingInner=0.12)),
+            color=alt.Color("share:Q", title="% of their plays", scale=alt.Scale(scheme="blues", domain=[0, 50], clamp=True)),
+            tooltip=[
+                alt.Tooltip("who:N", title="Player"),
+                alt.Tooltip("game_name:N", title="Game"),
+                alt.Tooltip("slot:N", title="Time"),
+                alt.Tooltip("plays:Q", title="Plays"),
+                alt.Tooltip("share:Q", title="% of their plays", format=".0f"),
+            ],
+        )
+        .properties(width=alt.Step(13), height=alt.Step(20))
+        .facet(facet=alt.Facet("who:N", title=None, sort=player_scale.domain, header=alt.Header(labelFontWeight="bold", labelAnchor="start")), columns=2)
+    )
+    style(_patterns)
     return
 
 

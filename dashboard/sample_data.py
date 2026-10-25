@@ -17,15 +17,18 @@ PUBLIC = Path(__file__).resolve().parent / "public"
 # Mirrors src/games.ts. A game has no results before its first day in the group.
 GAMES = {"eraly": (700, date(2026, 10, 16)), "krillion": (700, date(2026, 7, 16)), "sizeitup": (500, date(2026, 7, 16))}
 
-# name: (how often they play, how good they are)
+# name: (how often they play, how good they are, the local hour they usually play each game)
 PLAYERS = {
-    "Aino": (0.95, 0.80),
-    "Eero": (0.90, 0.70),
-    "Mikko": (0.75, 0.75),
-    "Lotta": (0.85, 0.62),
-    "Sanna": (0.55, 0.85),
-    "Ville": (0.40, 0.55),
+    "Aino": (0.95, 0.80, {"eraly": 7, "krillion": 7, "sizeitup": 8}),  # with the morning coffee
+    "Eero": (0.90, 0.70, {"eraly": 22, "krillion": 23, "sizeitup": 22}),  # night owl
+    "Mikko": (0.75, 0.75, {"eraly": 12, "krillion": 12, "sizeitup": 17}),  # lunch break, then the commute
+    "Lotta": (0.85, 0.62, {"eraly": 9, "krillion": 14, "sizeitup": 20}),  # spread over the day
+    "Sanna": (0.55, 0.85, {"eraly": 18, "krillion": 18, "sizeitup": 18}),  # all at once after work
+    "Ville": (0.40, 0.55, {"eraly": 16, "krillion": 21, "sizeitup": 1}),  # whenever, sometimes past midnight
 }
+
+# Every sample day is in Finnish summer time (it ends 25 Oct 2026), so a fixed offset is exact here.
+HELSINKI = timezone(timedelta(hours=3))
 
 
 def rank(entries: dict[int, float]) -> list[tuple[int, float, int]]:
@@ -42,7 +45,7 @@ def main() -> None:
     day = first
     while day <= last:
         day_results: dict[int, list[tuple[str, int, int]]] = {}
-        for player, (name, (activity, skill)) in enumerate(PLAYERS.items(), start=1):
+        for player, (name, (activity, skill, hours)) in enumerate(PLAYERS.items(), start=1):
             for game, (max_score, start) in GAMES.items():
                 if day < start or rng.random() > activity:
                     continue
@@ -54,7 +57,10 @@ def main() -> None:
                 else:
                     score = round(share * max_score)
                 puzzle = (day - start).days + 1 if game != "sizeitup" else None
-                submitted = datetime.combine(day, time(rng.randint(6, 22), rng.randint(0, 59)), timezone.utc)
+                # Around their usual hour, clamped to the day: a result counts for the day it arrives.
+                minute = min(24 * 60 - 1, max(0, round(rng.gauss(hours[game] * 60 + 30, 75))))
+                local = datetime.combine(day, time(minute // 60, minute % 60), HELSINKI)
+                submitted = local.astimezone(timezone.utc)
                 results.append(
                     {
                         "player": player,
