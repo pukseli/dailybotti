@@ -4,3 +4,4 @@ public/
 site/
 .venv/
 __marimo__/
+__pycache__/
