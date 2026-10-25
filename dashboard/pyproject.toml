@@ -5,6 +5,7 @@ description = "Scoreboard dashboard for the daily games bot"
 requires-python = ">=3.12"
 dependencies = [
     "altair>=5.4",
+    "great-tables>=1.1.0",
     "marimo>=0.23",
     "polars>=1.20",
 ]

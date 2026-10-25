@@ -9,10 +9,11 @@ def _():
     from datetime import timedelta
 
     import altair as alt
+    import great_tables as gt
     import marimo as mo
     import polars as pl
 
-    return alt, mo, pl, timedelta
+    return alt, gt, mo, pl, timedelta
 
 
 @app.cell
@@ -146,32 +147,87 @@ def _(mo):
 
 
 @app.cell
-def _(GAMES, mo, period_placements, pl):
-    _overall = (
-        period_placements.filter(pl.col("category") == "overall")
+def _(GAMES, PALETTE, gt, mo, period_placements, pl, player_scale):
+    _overall = pl.col("category") == "overall"
+    _rank = pl.col("rank")
+    leaderboard = (
+        period_placements.sort("day")
         .group_by("who")
         .agg(
-            (pl.col("rank") == 1).sum().alias("🥇"),
-            (pl.col("rank") == 2).sum().alias("🥈"),
-            (pl.col("rank") == 3).sum().alias("🥉"),
-            pl.len().alias("Days"),
-            pl.col("rank").mean().round(2).alias("Avg rank"),
-            pl.col("value").mean().round(1).alias("Avg points"),
+            gold=(_overall & (_rank == 1)).sum(),
+            silver=(_overall & (_rank == 2)).sum(),
+            bronze=(_overall & (_rank == 3)).sum(),
+            days=_overall.sum(),
+            avg_rank=_rank.filter(_overall).mean(),
+            avg_points=pl.col("value").filter(_overall).mean(),
+            # Space-separated values: the form great_tables draws as a nanoplot.
+            form=pl.col("value").filter(_overall).tail(14).round(0).cast(pl.Int64).cast(pl.String).str.join(" "),
+            **{f"{game}_wins": ((pl.col("category") == game) & (_rank == 1)).sum() for game in GAMES},
+        )
+        .sort(["gold", "silver", "bronze", "avg_points"], descending=True)
+    )
+
+    # Each player wears their chart colour, so the table and the charts read as one.
+    _colors = dict(zip(player_scale.domain, player_scale.range))
+    _dark = mo.app_meta().theme == "dark"
+    _ink, _muted, _rule = ("#f0efec", "#c3c2b7", "#3a3a37") if _dark else ("#0b0b0b", "#52514e", "#e4e3df")
+    _blue = PALETTE[0]
+    _medals = ["gold", "silver", "bronze"]
+    _wins = [f"{game}_wins" for game in GAMES]
+
+    (
+        gt.GT(
+            leaderboard.with_columns(
+                who=pl.format(
+                    '<span style="color:{}">●</span>&nbsp;{}', pl.col("who").replace_strict(_colors), pl.col("who")
+                )
+            )
+        )
+        .cols_label(
+            who="Player",
+            gold="🥇",
+            silver="🥈",
+            bronze="🥉",
+            days="Days",
+            avg_rank="Avg rank",
+            avg_points="Avg points",
+            form="Last 14 days",
+            **{f"{game}_wins": name for game, name in GAMES.items()},
+        )
+        .tab_spanner("Overall podiums", columns=_medals)
+        .tab_spanner("Daily wins by game", columns=_wins)
+        .fmt_markdown(columns="who")
+        .fmt_number(columns="avg_rank", decimals=2)
+        .fmt_number(columns="avg_points", decimals=1)
+        .data_color(columns="avg_points", palette=["#dce9f8" if not _dark else "#1d2a3a", _blue])
+        .fmt_nanoplot(
+            columns="form",
+            plot_type="line",
+            options=gt.nanoplot_options(
+                data_line_stroke_color=_blue,
+                data_point_fill_color=_blue,
+                data_point_stroke_color=_blue,
+                data_area_fill_color=_blue,
+            ),
+        )
+        .cols_align("center", columns=[*_medals, "days", *_wins])
+        .tab_style(gt.style.text(weight="bold"), gt.loc.body(rows=[0]))
+        .tab_source_note("Avg points: each game as a % of its max, summed (out of 300). Last 14 days: overall points per day played.")
+        .opt_table_font(stack="system-ui")
+        .tab_options(
+            table_width="100%",
+            table_background_color="transparent",
+            table_font_color=_ink,
+            table_border_top_style="hidden",
+            table_border_bottom_style="hidden",
+            column_labels_border_top_style="hidden",
+            column_labels_border_bottom_color=_rule,
+            column_labels_font_weight="600",
+            table_body_hlines_color=_rule,
+            table_body_border_bottom_color=_rule,
+            source_notes_font_size="12px",
         )
     )
-    _game_wins = [
-        period_placements.filter(pl.col("category") == game, pl.col("rank") == 1).group_by("who").len(name=f"{name} wins")
-        for game, name in GAMES.items()
-    ]
-    leaderboard = _overall
-    for _wins in _game_wins:
-        leaderboard = leaderboard.join(_wins, on="who", how="left")
-    leaderboard = (
-        leaderboard.fill_null(0)
-        .sort(["🥇", "🥈", "🥉", "Avg points"], descending=True)
-        .rename({"who": "Player"})
-    )
-    mo.ui.table(leaderboard, selection=None, show_column_summaries=False)
     return
 
 
