@@ -24,13 +24,15 @@ def _(mo):
 
     # Categorical slots in fixed order, stepped separately for light and dark surfaces.
     # Players past the eighth share a neutral gray rather than getting a generated hue.
-    _dark = mo.app_meta().theme == "dark"
+    DARK = mo.app_meta().theme == "dark"
     PALETTE = (
         ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"]
-        if _dark
+        if DARK
         else ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
     )
     OTHER = "#8a8985"
+    # Table text and hairlines for the same two surfaces.
+    INK, RULE = ("#f0efec", "#3a3a37") if DARK else ("#0b0b0b", "#e4e3df")
 
     def style(chart):
         """Recessive axes and grid, no frame: the data carries the chart."""
@@ -40,7 +42,7 @@ def _(mo):
             .configure_legend(labelColor=OTHER, titleColor=OTHER, orient="top")
         )
 
-    return CATEGORIES, GAMES, OTHER, PALETTE, style
+    return CATEGORIES, DARK, GAMES, INK, OTHER, PALETTE, RULE, style
 
 
 @app.cell
@@ -111,7 +113,7 @@ def _(period, picked, pl, placements, results, timedelta):
     period_results = results.filter(_keep)
     # Ranks stay as they were on the day, among everyone who played, whoever is picked here.
     period_placements = placements.filter(_keep)
-    return period_placements, period_results
+    return first_day, last_day, period_placements, period_results
 
 
 @app.cell
@@ -147,7 +149,17 @@ def _(mo):
 
 
 @app.cell
-def _(GAMES, PALETTE, gt, mo, period_placements, pl, player_scale):
+def _(
+    DARK,
+    GAMES,
+    INK,
+    PALETTE,
+    RULE,
+    gt,
+    period_placements,
+    pl,
+    player_scale,
+):
     _overall = pl.col("category") == "overall"
     _rank = pl.col("rank")
     leaderboard = (
@@ -169,8 +181,6 @@ def _(GAMES, PALETTE, gt, mo, period_placements, pl, player_scale):
 
     # Each player wears their chart colour, so the table and the charts read as one.
     _colors = dict(zip(player_scale.domain, player_scale.range))
-    _dark = mo.app_meta().theme == "dark"
-    _ink, _muted, _rule = ("#f0efec", "#c3c2b7", "#3a3a37") if _dark else ("#0b0b0b", "#52514e", "#e4e3df")
     _blue = PALETTE[0]
     _medals = ["gold", "silver", "bronze"]
     _wins = [f"{game}_wins" for game in GAMES]
@@ -199,7 +209,7 @@ def _(GAMES, PALETTE, gt, mo, period_placements, pl, player_scale):
         .fmt_markdown(columns="who")
         .fmt_number(columns="avg_rank", decimals=2)
         .fmt_number(columns="avg_points", decimals=1)
-        .data_color(columns="avg_points", palette=["#dce9f8" if not _dark else "#1d2a3a", _blue])
+        .data_color(columns="avg_points", palette=["#1d2a3a" if DARK else "#dce9f8", _blue])
         .fmt_nanoplot(
             columns="form",
             plot_type="line",
@@ -217,14 +227,14 @@ def _(GAMES, PALETTE, gt, mo, period_placements, pl, player_scale):
         .tab_options(
             table_width="100%",
             table_background_color="transparent",
-            table_font_color=_ink,
+            table_font_color=INK,
             table_border_top_style="hidden",
             table_border_bottom_style="hidden",
             column_labels_border_top_style="hidden",
-            column_labels_border_bottom_color=_rule,
+            column_labels_border_bottom_color=RULE,
             column_labels_font_weight="600",
-            table_body_hlines_color=_rule,
-            table_body_border_bottom_color=_rule,
+            table_body_hlines_color=RULE,
+            table_body_border_bottom_color=RULE,
             source_notes_font_size="12px",
         )
     )
@@ -299,34 +309,75 @@ def _(GAMES, alt, period_results, player_scale, style):
 def _(mo):
     mo.md("""
     ## Who shows up
-    Results posted per week. A full week with every game is 21.
+    Every day in the period, one box per game for each player.
     """)
     return
 
 
 @app.cell
-def _(alt, period_results, pl, player_scale, style):
-    _weekly = (
-        period_results.with_columns(week=pl.col("day").dt.truncate("1w"))
-        .group_by("week", "who")
-        .len(name="results")
-    )
-    _heat = (
-        alt.Chart(_weekly)
-        .mark_rect(cornerRadius=2)
-        .encode(
-            x=alt.X("week:O", title="Week of", timeUnit="yearmonthdate", axis=alt.Axis(format="%-d %b", labelAngle=-40), scale=alt.Scale(paddingInner=0.1)),
-            y=alt.Y("who:N", title=None, sort=player_scale.domain, scale=alt.Scale(paddingInner=0.1)),
-            color=alt.Color("results:Q", title="Results", scale=alt.Scale(scheme="blues", domainMin=0)),
-            tooltip=[
-                alt.Tooltip("who:N", title="Player"),
-                alt.Tooltip("week:T", title="Week of", format="%-d %b"),
-                alt.Tooltip("results:Q", title="Results"),
-            ],
+def _(
+    GAMES,
+    INK,
+    OTHER,
+    first_day,
+    gt,
+    last_day,
+    period_results,
+    picked,
+    pl,
+    player_scale,
+    results,
+):
+    # One box per player, game and day. A player can post each game once a day, so a box is either ticked or not.
+    # Days before a game's first result in the group get a dash instead: there was nothing to miss.
+    _who = [w for w in player_scale.domain if w in picked.value]
+    _started = dict(results.group_by("game").agg(pl.col("day").min()).iter_rows())
+    _posted = period_results.select("day", "who", "game").with_columns(posted=pl.lit(True))
+    attendance = (
+        pl.DataFrame({"day": pl.date_range(first_day, last_day, eager=True)})
+        .join(pl.DataFrame({"who": _who}), how="cross")
+        .join(pl.DataFrame({"game": list(GAMES)}), how="cross")
+        .join(_posted, on=["day", "who", "game"], how="left")
+        .with_columns(
+            box=pl.when(pl.col("day") < pl.col("game").replace_strict(_started, default=None))
+            .then(pl.lit("–"))
+            .when(pl.col("posted"))
+            .then(pl.lit("☑"))
+            .otherwise(pl.lit("☐")),
+            column=pl.format("{}|{}", "who", "game"),
         )
-        .properties(width="container", height=alt.Step(28))
+        .pivot("column", index="day", values="box")
+        .sort("day", descending=True)
     )
-    style(_heat)
+
+    _colors = dict(zip(player_scale.domain, player_scale.range))
+    _columns = {w: [f"{w}|{g}" for g in GAMES] for w in _who}
+    _table = (
+        gt.GT(attendance.with_columns(pl.col("day").dt.strftime("%a %d %b")))
+        .cols_label(day="", **{c: GAMES[c.split("|")[1]][0] for cs in _columns.values() for c in cs})
+        .cols_align("center", columns=[c for cs in _columns.values() for c in cs])
+        .tab_style(gt.style.text(color=OTHER, size="13px"), gt.loc.body(columns="day"))
+        .tab_source_note(f"{' · '.join(f'{name[0]} = {name}' for name in GAMES.values())}. ☑ posted · ☐ missed · – game not in the group yet")
+        .opt_table_font(stack="system-ui")
+        .tab_options(
+            table_width="100%",
+            table_background_color="transparent",
+            table_font_color=INK,
+            table_border_top_style="hidden",
+            table_border_bottom_style="hidden",
+            column_labels_border_top_style="hidden",
+            table_body_hlines_style="hidden",
+            data_row_padding="2px",
+            container_height="460px",
+            container_overflow_y="auto",
+            source_notes_font_size="12px",
+        )
+    )
+    for _w, _cs in _columns.items():
+        _table = _table.tab_spanner(_w, columns=_cs).tab_style(
+            gt.style.text(color=_colors[_w], size="17px"), gt.loc.body(columns=_cs)
+        )
+    _table
     return
 
 
