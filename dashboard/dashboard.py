@@ -198,6 +198,8 @@ def _(
         period_results.filter(pl.col("game") == "krillion", pl.col("rounds_json").is_not_null())
         .select("who", symbol=pl.col("rounds_json").str.json_decode(pl.List(pl.String)))
         .explode("symbol")
+        # Some phones send ⬛ with an emoji presentation selector (⬛ + U+FE0F); it's the same symbol.
+        .with_columns(pl.col("symbol").str.replace_all("\ufe0f", "", literal=True))
     )
     _size_it_up = (
         period_results.filter(pl.col("game") == "sizeitup", pl.col("rounds_json").is_not_null())
@@ -325,8 +327,13 @@ def _(
         color = _colors[who]
         tags = "".join(f'<span class="pf-tag" title="{html.escape(why)}">{html.escape(tag)}</span>' for _, tag, why in player_tags[who])
         games = "".join(_portion(GAMES[g], n, out_of, color) for g, (n, out_of) in f["games"].items() if out_of)
+        # A tiny column chart of the symbol spread, best symbol first. Bars scale to the player's most common
+        # symbol, so each card shows its own shape; the raw count sits under each bar.
+        _peak = max(f["symbols"].values()) or 1
         symbols = "".join(
-            f'<span class="pf-sym" title="{name} · {points} points">{s}<b>{f["symbols"][s]}</b></span>'
+            f'<div class="pf-sym" title="{name} · {points} points · {f["symbols"][s]}×">'
+            f'<span>{s}</span><div class="pf-col"><div style="height:{f["symbols"][s] / _peak * 100:.0f}%;background:{color}"></div></div>'
+            f'<b>{f["symbols"][s]}</b></div>'
             for s, (name, points) in KRILLION_SYMBOLS.items()
         )
         size_it_up = (
@@ -362,9 +369,11 @@ def _(
           .pf-games {{ padding-left:10px; border-left:2px solid {RULE}; margin:2px 0 4px; }}
           .pf-games .pf-row {{ font-size:12px; }}
           .pf-head {{ font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:{OTHER}; margin-top:6px; }}
-          .pf-syms {{ display:flex; flex-wrap:wrap; gap:4px 10px; font-size:13px; }}
-          .pf-sym {{ cursor:help; font-variant-numeric:tabular-nums; }}
-          .pf-sym b {{ font-weight:600; margin-left:3px; }}
+          .pf-syms {{ display:grid; grid-template-columns:repeat(7,1fr); gap:6px; margin-top:2px; }}
+          .pf-sym {{ display:flex; flex-direction:column; align-items:center; gap:3px; cursor:help; font-size:13px; }}
+          .pf-col {{ width:100%; max-width:22px; height:36px; display:flex; align-items:flex-end; border-bottom:1px solid {RULE}; }}
+          .pf-col div {{ width:100%; min-height:1px; border-radius:3px 3px 0 0; }}
+          .pf-sym b {{ font-size:11px; font-weight:600; font-variant-numeric:tabular-nums; }}
           .pf-none {{ color:{OTHER}; }}
         </style>
         <div class="pf-grid">{"".join(_sheet(w, f) for w, f in facts.items())}</div>
