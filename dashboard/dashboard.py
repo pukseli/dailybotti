@@ -6,6 +6,7 @@ app = marimo.App(width="medium", app_title="Daily games stats")
 
 @app.cell
 def _():
+    import html
     from datetime import timedelta
 
     import altair as alt
@@ -13,7 +14,7 @@ def _():
     import marimo as mo
     import polars as pl
 
-    return alt, gt, mo, pl, timedelta
+    return alt, gt, html, mo, pl, timedelta
 
 
 @app.cell
@@ -23,6 +24,17 @@ def _(mo):
     CATEGORIES = {"Overall": "overall", **{name: game for game, name in GAMES.items()}}
     # The group's timezone, as in wrangler.jsonc. Days and hours on the dashboard follow it.
     TIMEZONE = "Europe/Helsinki"
+    # Krillion's dive row, one symbol per round, best first (plan.md).
+    # 🌟 and 🤡 are unconfirmed: their values come from a fan site, not a real share yet.
+    KRILLION_SYMBOLS = {
+        "🌟": ("One in a Krillion", 100),
+        "🏮": ("Deep Cut", 85),
+        "🦑": ("Rare", 60),
+        "🐟": ("Schooler", 30),
+        "🤡": ("Too Clever", 15),
+        "🫧": ("Plankton", 10),
+        "⬛": ("Miss", 0),
+    }
 
     # Categorical slots in fixed order, stepped separately for light and dark surfaces.
     # Players past the eighth share a neutral gray rather than getting a generated hue.
@@ -44,7 +56,18 @@ def _(mo):
             .configure_legend(labelColor=OTHER, titleColor=OTHER, orient="top")
         )
 
-    return CATEGORIES, DARK, GAMES, INK, OTHER, PALETTE, RULE, TIMEZONE, style
+    return (
+        CATEGORIES,
+        DARK,
+        GAMES,
+        INK,
+        KRILLION_SYMBOLS,
+        OTHER,
+        PALETTE,
+        RULE,
+        TIMEZONE,
+        style,
+    )
 
 
 @app.cell
@@ -72,8 +95,8 @@ def _(GAMES, OTHER, PALETTE, TIMEZONE, alt, mo, pl):
     results = _results.join(_who, on="player").with_columns(
         game_name=_game_names,
         pct=pl.col("score") / pl.col("max_score") * 100,
-        hour=pl.col("submitted_at").str.to_datetime(time_zone="UTC").dt.convert_time_zone(TIMEZONE).dt.hour(),
-    )
+        submitted=pl.col("submitted_at").str.to_datetime(time_zone="UTC").dt.convert_time_zone(TIMEZONE),
+    ).with_columns(hour=pl.col("submitted").dt.hour())
     placements = _placements.join(_who, on="player")
 
     # Colour follows the player, never the filter: every chart uses this one scale over everyone.
@@ -141,6 +164,212 @@ def _(mo, period_placements, period_results, pl):
         ],
         widths="equal",
         gap=1,
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md("""
+    ## Player fact sheets
+    How often everyone plays, their best rounds, and a few tags for what they're known for.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(
+    GAMES,
+    KRILLION_SYMBOLS,
+    last_day,
+    period_placements,
+    period_results,
+    pl,
+    player_scale,
+    timedelta,
+):
+    # The numbers behind each fact sheet, over the period and the picked players.
+    # Portions are out of the days that had any result, so a game nobody could play yet doesn't count against anyone.
+    _game_days = dict(period_results.group_by("game").agg(pl.col("day").n_unique()).iter_rows())
+    _all_days = period_results["day"].n_unique()
+
+    # Rounds come as JSON: seven symbols for Krillion, five scores for Size It Up. Older rows may have none.
+    _krillion = (
+        period_results.filter(pl.col("game") == "krillion", pl.col("rounds_json").is_not_null())
+        .select("who", symbol=pl.col("rounds_json").str.json_decode(pl.List(pl.String)))
+        .explode("symbol")
+    )
+    _size_it_up = (
+        period_results.filter(pl.col("game") == "sizeitup", pl.col("rounds_json").is_not_null())
+        .select("who", points=pl.col("rounds_json").str.json_decode(pl.List(pl.Int64)))
+        .explode("points")
+    )
+    _overall = period_placements.filter(pl.col("category") == "overall")
+    _last_week = last_day - timedelta(days=6)
+
+    facts = {}
+    for _w in [w for w in player_scale.domain if w in period_results["who"].unique()]:
+        _r = period_results.filter(pl.col("who") == _w)
+        _o = _overall.filter(pl.col("who") == _w)
+        _days = set(_r["day"].to_list())
+        _streak = 0
+        while last_day - timedelta(days=_streak) in _days:
+            _streak += 1
+        # Days with two or more games where everything was posted within half an hour.
+        _sessions = _r.group_by("day").agg(n=pl.len(), span=pl.col("submitted").max() - pl.col("submitted").min()).filter(pl.col("n") >= 2)
+        _symbols = dict(_krillion.filter(pl.col("who") == _w).group_by("symbol").len().iter_rows())
+        _rounds = _size_it_up.filter(pl.col("who") == _w)["points"]
+        facts[_w] = {
+            "days": len(_days),
+            "all_days": _all_days,
+            "games": {g: (_r.filter(pl.col("game") == g).height, _game_days.get(g, 0)) for g in GAMES},
+            "results": _r.height,
+            "early": _r["hour"].is_between(5, 9).mean(),
+            "last_minute": (_r["hour"] == 23).mean(),
+            "night": ((_r["hour"] >= 21) | (_r["hour"] < 4)).mean(),
+            "weekend": sum(d.weekday() >= 5 for d in _days) / len(_days),
+            "speedrun": (_sessions["span"] <= timedelta(minutes=30)).mean() if _sessions.height else 0.0,
+            "streak": _streak,
+            "wins": (_o["rank"] == 1).sum(),
+            "silvers": (_o["rank"] == 2).sum(),
+            "avg_pct": _r["pct"].mean(),
+            "pct_spread": _r["pct"].std() if _r.height >= 10 else None,
+            "form": (_o.filter(pl.col("day") >= _last_week)["value"].mean() or 0) - (_o["value"].mean() or 0),
+            "form_base": _o["value"].mean() or 0,
+            "symbols": {s: _symbols.get(s, 0) for s in KRILLION_SYMBOLS},
+            "krillion_rounds": sum(_symbols.values()),
+            "hundreds": int((_rounds == 100).sum()),
+            "size_rounds": _rounds.len(),
+        }
+    return (facts,)
+
+
+@app.cell(hide_code=True)
+def _(facts):
+    # Tags for the fact sheets. Every rule that fits gives a (priority, tag, why) and each sheet shows its top 3.
+    # Feats (85-100) outrank habits (50-80), so a rare achievement always shows. Hit-rate tags compare how often,
+    # not how many, so someone who plays less can still earn them; ties share the tag.
+    def _best(value, eligible=lambda f: True, lowest=False):
+        scores = {w: value(f) for w, f in facts.items() if eligible(f)}
+        if not scores:
+            return set()
+        target = (min if lowest else max)(scores.values())
+        return {w for w, s in scores.items() if s == target and (lowest or s > 0)}
+
+    _champs = _best(lambda f: f["wins"])
+    _bridesmaids = _best(lambda f: f["silvers"])
+    _stars = _best(lambda f: f["symbols"]["🌟"] / f["krillion_rounds"], lambda f: f["krillion_rounds"] >= 35)
+    _bullseyes = _best(lambda f: f["hundreds"] / f["size_rounds"], lambda f: f["size_rounds"] >= 25)
+    _clowns = _best(lambda f: f["symbols"]["🤡"] / f["krillion_rounds"], lambda f: f["krillion_rounds"] >= 35)
+    _top_scorers = _best(lambda f: f["avg_pct"], lambda f: f["results"] >= 5)
+    _steady = _best(lambda f: f["pct_spread"], lambda f: f["pct_spread"] is not None, lowest=True) if len(facts) >= 2 else set()
+
+    player_tags = {}
+    for _w, _f in facts.items():
+        _share = _f["days"] / _f["all_days"] if _f["all_days"] else 0
+        _enough = _f["results"] >= 5  # habits need a few results before they mean anything
+        _never_misses = _share >= 0.95 and _f["days"] >= 5
+        _star_rate = _f["symbols"]["🌟"] / _f["krillion_rounds"] if _f["krillion_rounds"] else 0
+        _hit_rate = _f["hundreds"] / _f["size_rounds"] if _f["size_rounds"] else 0
+        _rules = [
+            # Feats
+            (_w in _champs, 100, "👑 Daily Champ", f"Most overall daily wins: {_f['wins']}"),
+            (_w in _stars, 92, "🌟 One in a Krillion", f"🌟 on {_star_rate:.0%} of Krillion rounds, the most often ({_f['symbols']['🌟']} in all)"),
+            (_w in _bullseyes, 90, "💯 Bullseye", f"100 on {_hit_rate:.0%} of Size It Up rounds, the most often ({_f['hundreds']} in all)"),
+            (_never_misses, 85, "📅 Never Misses", f"Played {_share:.0%} of game days"),
+            # Standing
+            (_w in _top_scorers, 78, "📊 Top Scorer", f"Best average: {_f['avg_pct']:.0f}% of max per game"),
+            (_w in _steady, 72, "🎯 Steady Eddie", f"Most consistent scores (± {_f['pct_spread'] or 0:.0f}% of max)"),
+            (_w in _bridesmaids and _w not in _champs, 66, "🥈 Always the Bridesmaid", f"Most 2nd places: {_f['silvers']}"),
+            (not _never_misses and _f["streak"] >= 5, min(80, 60 + _f["streak"]), "🔥 On a Streak", f"Played every one of the last {_f['streak']} days"),
+            (_f["days"] >= 10 and _f["form_base"] > 0 and _f["form"] >= 0.1 * _f["form_base"], 62, "📈 Heating Up", f"Last 7 days {_f['form']:+.0f} points above their average"),
+            # Habits
+            (_enough and _f["last_minute"] >= 0.25, 60 + 20 * _f["last_minute"], "⏰ Last Minute Larry", f"{_f['last_minute']:.0%} of plays in the last hour before midnight"),
+            (_enough and _f["early"] >= 0.5, 55 + 25 * _f["early"], "🐦 Early Bird", f"{_f['early']:.0%} of plays between 05:00 and 10:00"),
+            (_enough and _f["night"] >= 0.5 and _f["last_minute"] < 0.25, 50 + 25 * _f["night"], "🦉 Night Owl", f"{_f['night']:.0%} of plays between 21:00 and 04:00"),
+            (_w in _clowns and _f["symbols"]["🤡"] >= 2, 58, "🤡 Too Clever", f"🤡 on {_f['symbols']['🤡']} Krillion rounds, the most often"),
+            (_enough and _f["speedrun"] >= 0.6, 52, "⚡ Speedrunner", f"Posts everything within 30 minutes on {_f['speedrun']:.0%} of days"),
+            (_f["days"] >= 6 and _f["weekend"] >= 0.45, 50, "🛋️ Weekend Warrior", f"{_f['weekend']:.0%} of their game days are weekends"),
+            (_share < 0.5, 45, "👻 Part-timer", f"Played {_share:.0%} of game days"),
+        ]
+        _earned = sorted(((p, t, why) for fits, p, t, why in _rules if fits), key=lambda e: e[0], reverse=True)[:3]
+        player_tags[_w] = _earned or [(0, "🎮 Regular", "Here, playing, no fuss")]
+    return (player_tags,)
+
+
+@app.cell(hide_code=True)
+def _(
+    GAMES,
+    INK,
+    KRILLION_SYMBOLS,
+    OTHER,
+    RULE,
+    facts,
+    html,
+    mo,
+    player_scale,
+    player_tags,
+):
+    # One card per player. Bars and the top edge wear the player's chart colour; text stays in table ink.
+    _colors = dict(zip(player_scale.domain, player_scale.range))
+
+
+    def _portion(label, done, out_of, color):
+        share = done / out_of if out_of else 0
+        return f"""
+        <div class="pf-row"><span>{label}</span><span><b>{done}</b> / {out_of} · {share:.0%}</span></div>
+        <div class="pf-bar"><div style="width:{share * 100:.1f}%;background:{color}"></div></div>"""
+
+
+    def _sheet(who, f):
+        color = _colors[who]
+        tags = "".join(f'<span class="pf-tag" title="{html.escape(why)}">{html.escape(tag)}</span>' for _, tag, why in player_tags[who])
+        games = "".join(_portion(GAMES[g], n, out_of, color) for g, (n, out_of) in f["games"].items() if out_of)
+        symbols = "".join(
+            f'<span class="pf-sym" title="{name} · {points} points">{s}<b>{f["symbols"][s]}</b></span>'
+            for s, (name, points) in KRILLION_SYMBOLS.items()
+        )
+        size_it_up = (
+            f'<div class="pf-row"><span>💯 rounds</span><span><b>{f["hundreds"]}</b> of {f["size_rounds"]} · {f["hundreds"] / f["size_rounds"]:.0%}</span></div>'
+            if f["size_rounds"]
+            else '<div class="pf-row pf-none">No rounds posted</div>'
+        )
+        krillion = f'<div class="pf-syms">{symbols}</div>' if f["krillion_rounds"] else '<div class="pf-row pf-none">No rounds posted</div>'
+        return f"""
+        <div class="pf-card" style="border-top-color:{color}">
+          <div class="pf-name">{html.escape(who)}</div>
+          <div class="pf-tags">{tags}</div>
+          {_portion("Game days", f["days"], f["all_days"], color)}
+          <div class="pf-games">{games}</div>
+          <div class="pf-head">Size It Up</div>{size_it_up}
+          <div class="pf-head">Krillion</div>{krillion}
+        </div>"""
+
+
+    mo.Html(
+        f"""
+        <style>
+          .pf-grid {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:12px; color:{INK}; font-family:system-ui,sans-serif; }}
+          .pf-card {{ border:1px solid {RULE}; border-top:4px solid; border-radius:8px; padding:12px 14px; display:flex; flex-direction:column; gap:4px; }}
+          .pf-name {{ font-size:17px; font-weight:650; }}
+          .pf-tags {{ display:flex; flex-wrap:wrap; gap:4px; margin:2px 0 8px; }}
+          .pf-tag {{ font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid {RULE}; cursor:help; white-space:nowrap; }}
+          .pf-row {{ display:flex; justify-content:space-between; font-size:13px; gap:8px; }}
+          .pf-row span:last-child {{ color:{OTHER}; font-variant-numeric:tabular-nums; }}
+          .pf-row b {{ color:{INK}; font-weight:600; }}
+          .pf-bar {{ height:4px; border-radius:2px; background:{RULE}; overflow:hidden; margin-bottom:4px; }}
+          .pf-bar div {{ height:100%; border-radius:2px; }}
+          .pf-games {{ padding-left:10px; border-left:2px solid {RULE}; margin:2px 0 4px; }}
+          .pf-games .pf-row {{ font-size:12px; }}
+          .pf-head {{ font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:{OTHER}; margin-top:6px; }}
+          .pf-syms {{ display:flex; flex-wrap:wrap; gap:4px 10px; font-size:13px; }}
+          .pf-sym {{ cursor:help; font-variant-numeric:tabular-nums; }}
+          .pf-sym b {{ font-weight:600; margin-left:3px; }}
+          .pf-none {{ color:{OTHER}; }}
+        </style>
+        <div class="pf-grid">{"".join(_sheet(w, f) for w, f in facts.items())}</div>
+        <div style="font-size:12px;color:{OTHER};margin-top:6px;font-family:system-ui,sans-serif">Hover a tag to see why. Krillion symbols run best to worst; 🌟 and 🤡 point values aren't confirmed yet.</div>
+        """
     )
     return
 

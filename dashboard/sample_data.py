@@ -27,6 +27,9 @@ PLAYERS = {
     "Ville": (0.40, 0.55, {"eraly": 16, "krillion": 21, "sizeitup": 1}),  # whenever, sometimes past midnight
 }
 
+# Krillion's dive row, one symbol per round (plan.md), with the round quality each one needs.
+KRILLION = [("⬛", 0, 0.0), ("🫧", 10, 0.15), ("🤡", 15, 0.30), ("🐟", 30, 0.36), ("🦑", 60, 0.55), ("🏮", 85, 0.75), ("🌟", 100, 0.93)]
+
 # Every sample day is in Finnish summer time (it ends 25 Oct 2026), so a fixed offset is exact here.
 HELSINKI = timezone(timedelta(hours=3))
 
@@ -54,6 +57,11 @@ def main() -> None:
                 if game == "sizeitup":
                     rounds = [min(100, max(0, round(rng.gauss(share * 100, 10)))) for _ in range(5)]
                     score, rounds_json = sum(rounds), json.dumps(rounds)
+                elif game == "krillion":
+                    # The score is the sum of the seven symbols, as in a real share.
+                    qualities = [rng.gauss(share - 0.2, 0.2) for _ in range(7)]
+                    row = [max((k for k in KRILLION if q >= k[2]), key=lambda k: k[2], default=KRILLION[0]) for q in qualities]
+                    score, rounds_json = sum(k[1] for k in row), json.dumps([k[0] for k in row], ensure_ascii=False)
                 else:
                     score = round(share * max_score)
                 puzzle = (day - start).days + 1 if game != "sizeitup" else None
