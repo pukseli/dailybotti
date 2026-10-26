@@ -9,6 +9,10 @@ export const PRIVATE_COMMANDS = [
   { command: "leaderboard", description: "All-time standings" },
   { command: "regressio", description: "Hajonta- ja outlier-analyysi" },
   { command: "name", description: "Change your name on the leaderboards" },
+  { command: "haaste", description: "Päivän imitaatiohaaste ja tilanne" },
+  { command: "aanesta", description: "Imitaatioäänestyksen äänestyslippu" },
+  { command: "ehdota", description: "Ehdota hahmoa imitoitavaksi" },
+  { command: "ehdotukset", description: "Imitaatioehdotukset" },
   { command: "help", description: "Käyttö- ja käyttöönotto-ohjeet" },
 ];
 
@@ -18,6 +22,9 @@ export const GROUP_COMMANDS = [
   { command: "me", description: "Your stats" },
   { command: "regressio", description: "Hajonta- ja outlier-analyysi" },
   { command: "name", description: "Change your name on the leaderboards" },
+  { command: "haaste", description: "Päivän imitaatiohaaste ja tilanne" },
+  { command: "ehdota", description: "Ehdota hahmoa imitoitavaksi" },
+  { command: "ehdotukset", description: "Imitaatioehdotukset" },
   { command: "setup", description: "Link the bot to this group (admins)" },
   { command: "help", description: "Käyttö- ja käyttöönotto-ohjeet" },
 ];

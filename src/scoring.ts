@@ -2,7 +2,8 @@ import { GAMES, type GameId } from "./games";
 
 export interface DayResult {
   playerId: number;
-  game: GameId;
+  /** A game, or the imitation contest (score = points received, maxScore = the most possible). */
+  game: GameId | "imitation";
   score: number;
   maxScore: number;
 }
@@ -13,7 +14,7 @@ export interface Standing {
   rank: number;
 }
 
-export type Category = GameId | "overall";
+export type Category = GameId | "imitation" | "overall";
 
 /** Highest value first. Equal values share a rank and the next rank is skipped (1, 1, 3). */
 export function rank(entries: { playerId: number; value: number }[]): Standing[] {
@@ -21,19 +22,30 @@ export function rank(entries: { playerId: number; value: number }[]): Standing[]
   return sorted.map((e) => ({ ...e, rank: 1 + sorted.filter((o) => o.value > e.value).length }));
 }
 
-/** Overall score: each game as a percentage of its maximum, summed (out of 300). A skipped game counts as 0. */
+/**
+ * Overall score: each game as a percentage of its maximum, summed (out of 300, or 400 on a day with an imitation
+ * contest). A skipped game counts as 0.
+ */
 export function overallValue(results: DayResult[]): number {
   const sum = results.reduce((acc, r) => acc + (r.score / r.maxScore) * 100, 0);
   return Math.round(sum * 10) / 10;
 }
 
-/** Standings for each game and overall. Everyone who played at least one game appears in overall. */
+/** Standings for each game, the imitation (if any) and overall. Everyone who took part in anything appears in overall. */
 export function dayStandings(results: DayResult[]): Map<Category, Standing[]> {
   const standings = new Map<Category, Standing[]>();
   for (const game of GAMES) {
     standings.set(
       game.id,
       rank(results.filter((r) => r.game === game.id).map((r) => ({ playerId: r.playerId, value: r.score }))),
+    );
+  }
+  // The imitation is ranked by percentage, since players can have different maximums (nobody votes for themselves).
+  const imitation = results.filter((r) => r.game === "imitation");
+  if (imitation.length > 0) {
+    standings.set(
+      "imitation",
+      rank(imitation.map((r) => ({ playerId: r.playerId, value: Math.round((r.score / r.maxScore) * 1000) / 10 }))),
     );
   }
   const byPlayer = new Map<number, DayResult[]>();

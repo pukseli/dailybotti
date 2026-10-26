@@ -59,7 +59,8 @@ async function init(request: Request, env: Env): Promise<Response> {
     await tg.call("setWebhook", {
       url: webhookUrl,
       secret_token: env.WEBHOOK_SECRET,
-      allowed_updates: ["message"],
+      // callback_query: taps on the imitation ballot buttons.
+      allowed_updates: ["message", "callback_query"],
       max_connections: 1,
     });
     report.push(`✅ Webhook set to ${webhookUrl}`);
@@ -97,6 +98,12 @@ export default {
         if (msg && (msg.chat.type === "private" || msg.text?.startsWith("/"))) {
           await ctx.tg
             .call("sendMessage", { chat_id: msg.chat.id, text: "Sorry, something went wrong. Please try again in a minute." })
+            .catch(() => {});
+        }
+        // A ballot tap must always get an answer, or the button keeps spinning.
+        if (update.callback_query) {
+          await ctx.tg
+            .call("answerCallbackQuery", { callback_query_id: update.callback_query.id, text: "Jotain meni pieleen, yritä hetken päästä uudelleen." })
             .catch(() => {});
         }
       }

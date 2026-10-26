@@ -27,11 +27,29 @@ export interface Message {
   caption?: string;
   reply_to_message?: Message;
   migrate_to_chat_id?: number;
+  /** Recordings: a voice message, an audio file or a round video message. */
+  voice?: { file_id: string; duration: number };
+  audio?: { file_id: string; duration: number };
+  video_note?: { file_id: string; duration: number };
+}
+
+/** A tap on an inline keyboard button. */
+export interface CallbackQuery {
+  id: string;
+  from: User;
+  message?: Message;
+  data?: string;
+}
+
+export interface InlineKeyboardButton {
+  text: string;
+  callback_data: string;
 }
 
 export interface Update {
   update_id: number;
   message?: Message;
+  callback_query?: CallbackQuery;
 }
 
 export interface ChatMember {

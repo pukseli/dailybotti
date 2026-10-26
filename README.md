@@ -101,9 +101,18 @@ On a phone, Share opens the share menu, so you can pick Telegram and then the gr
 - Only the **first** result for each game and day counts.
 - Eraly and Krillion results are filed by their puzzle number. Size It Up's share text has no number, so it counts for the day the bot receives it. Send it before the day closes.
 - Krillion's new puzzle appears at midnight New York time (7 am in Finland, 6 am in most of Europe). Before that, the playable Krillion is still the previous day's, which has already closed.
-- **Overall score:** each game is converted to a percentage of its maximum (Eraly 700, Krillion 700, Size It Up 500) and the three are added up, out of 300. A game you skip counts as 0.
+- **Overall score:** each game is converted to a percentage of its maximum (Eraly 700, Krillion 700, Size It Up 500) and the three are added up, out of 300. On a day with an imitation contest it counts as a fourth event, out of 400. A game you skip counts as 0.
 - Ties share a place: two 🥇 and then a 🥉.
 - Results must come from members of the linked group.
+
+## Imitation contest
+
+1. **The draw:** at 09:00 the bot draws a character or person from the group's suggestions (`/ehdota Mikki Hiiri`) and announces it in the group. A suggestion is only ever drawn once. If the list has run out, the bot says so once and there's no contest that day.
+2. **Recordings:** players post their imitation in the group as a voice message (an audio file or round video works too) by 21:00. The bot reacts 👏. If someone posts again, the latest recording counts.
+3. **The vote:** as soon as every player has sent one, or at 21:00 at the latest, each player gets a private ballot from the bot. They pick the best (3 points) and the runner-up (1 point), and can't pick themselves. Players who didn't record can still vote. A progress message in the group shows who has voted. The vote needs at least two recordings, otherwise the contest is called off for the day.
+4. **Results:** when everyone has voted, the bot posts the imitation results. Otherwise the vote ends when the day closes. The imitation then counts in the day's overall score as **points received ÷ the most possible × 100**. The most possible is 3 points from every ballot cast by someone else, so a player who didn't vote doesn't lower anyone's maximum.
+
+The early podium (posted when everyone has played everything) waits for the vote. The times are `CHALLENGE_TIME` and `VOTE_DEADLINE` in `src/imitation.ts`.
 
 ## Commands
 
@@ -114,6 +123,10 @@ On a phone, Share opens the share menu, so you can pick Telegram and then the gr
 | `/me` | both | Your medals, averages and bests |
 | `/leaderboard` | both | All-time standings |
 | `/name New name` (or `/nimi`) | both | Changes your name on the board, podiums, leaderboard and stats. `/name reset` goes back to your Telegram name. Available after your first result |
+| `/haaste` | both | Today's imitation character, who has sent a recording, and how the vote is going |
+| `/ehdota Nimi` | both | Adds a character or person to the imitation draw |
+| `/ehdotukset` | both | Lists the suggestions still in the draw |
+| `/aanesta` | private | Sends you a new imitation ballot, e.g. if the first one couldn't be delivered |
 | `/setup` | group | Links the bot to the group (admins only) |
 
 ## Maintenance

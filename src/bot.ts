@@ -22,13 +22,28 @@ import {
   type ResultRow,
   type Settings,
 } from "./db";
+import { dayIsClosed, EXPECTED_PLAYERS, isGroupMember, reply, sendToGroup, today, tryCall, type Ctx } from "./chat";
+
+export { EXPECTED_PLAYERS };
 import { syncCommandMenus } from "./commands";
+import {
+  ballotCommand,
+  challengeCommand,
+  handleRecording,
+  handleVoteTap,
+  imitationForBoard,
+  imitationForDay,
+  imitationPending,
+  imitationTick,
+  isRecording,
+  suggestCommand,
+  suggestionsCommand,
+} from "./imitation";
 import { GAMES, dayForResult, gameById, parseResults, parseRoundData, type ParsedResult } from "./games";
 import {
   calculateRegression,
   checkBlowout,
   generateExplanation,
-  type Ai,
   type BlowoutReport,
   type RegressioReport,
 } from "./regressio";
@@ -43,30 +58,14 @@ import {
   renderRegressio,
   renderSummary,
 } from "./render";
-import { dayStandings, overallValue } from "./scoring";
-import { isMessageGone, isNotModified, TelegramError, type ChatMember, type Message, type Telegram, type Update, type User } from "./telegram";
-import { addDays, dayLabel, isClosed, localParts } from "./time";
+import { dayStandings, overallValue, type DayResult } from "./scoring";
+import { isMessageGone, isNotModified, type ChatMember, type Message, type Update, type User } from "./telegram";
+import { addDays, dayLabel } from "./time";
 
-export interface Ctx {
-  db: D1Database;
-  tg: Telegram;
-  now: Date;
-  timeZone: string;
-  closeTime: string;
-  ai?: Ai;
-}
+export type { Ctx } from "./chat";
 
 const BOARD_CLAIM_MS = 60_000;
 
-export const EXPECTED_PLAYERS = 4;
-
-function today(ctx: Ctx): string {
-  return localParts(ctx.now, ctx.timeZone).date;
-}
-
-function dayIsClosed(ctx: Ctx, day: string): boolean {
-  return isClosed(day, ctx.now, ctx.timeZone, ctx.closeTime);
-}
 
 /**
  * Checks whether all expected players have completed all games for the given day.
@@ -84,55 +83,14 @@ export async function isDayComplete(ctx: Ctx, day: string, minPlayers = EXPECTED
     const hasAll = GAMES.every((g) => playerResults.some((r) => r.game === g.id));
     if (!hasAll) return false;
   }
-  return true;
+  // The imitation contest is part of the day's score, so wait for its vote too.
+  return !(await imitationPending(ctx, day));
 }
 
-// ---------- sending ----------
-
-interface SendOptions {
-  silent?: boolean;
-  replyTo?: Message;
-}
-
-async function send(ctx: Ctx, chatId: number, text: string, opts: SendOptions & { threadId?: number | null } = {}): Promise<Message> {
-  const params: Record<string, unknown> = {
-    chat_id: chatId,
-    text,
-    parse_mode: "HTML",
-    link_preview_options: { is_disabled: true },
-  };
-  if (opts.silent) params.disable_notification = true;
-  if (opts.threadId) params.message_thread_id = opts.threadId;
-  if (opts.replyTo) params.reply_parameters = { message_id: opts.replyTo.message_id, allow_sending_without_reply: true };
-  return ctx.tg.call<Message>("sendMessage", params);
-}
-
-/** Replies in the chat (and forum topic) the message came from. */
-function reply(ctx: Ctx, msg: Message, text: string): Promise<Message> {
-  const threadId = msg.is_topic_message ? msg.message_thread_id : undefined;
-  return send(ctx, msg.chat.id, text, msg.chat.type === "private" ? {} : { replyTo: msg, threadId });
-}
-
-/** Sends to the linked group, following it if Telegram has upgraded it to a supergroup. */
-async function sendToGroup(ctx: Ctx, settings: Settings, text: string, opts: SendOptions = {}): Promise<Message> {
-  try {
-    return await send(ctx, settings.groupChatId!, text, { ...opts, threadId: settings.groupThreadId });
-  } catch (err) {
-    if (!(err instanceof TelegramError) || !err.migrateToChatId) throw err;
-    await setSetting(ctx.db, "group_chat_id", err.migrateToChatId);
-    settings.groupChatId = err.migrateToChatId;
-    return send(ctx, settings.groupChatId, text, { ...opts, threadId: settings.groupThreadId });
-  }
-}
-
-async function tryCall(ctx: Ctx, method: string, params: Record<string, unknown>): Promise<boolean> {
-  try {
-    await ctx.tg.call(method, params);
-    return true;
-  } catch (err) {
-    console.warn(`${method} failed`, err instanceof Error ? err.message : err);
-    return false;
-  }
+/** After something changed a day: post the podium if the day is complete, otherwise update the board. */
+async function finishOrRefresh(ctx: Ctx, settings: Settings, day: string): Promise<void> {
+  if (!dayIsClosed(ctx, day) && (await isDayComplete(ctx, day))) await finalizeDay(ctx, settings, day);
+  else await refreshBoardSafely(ctx, settings, [day]);
 }
 
 // ---------- updates ----------
@@ -147,6 +105,13 @@ export function parseCommand(text: string, botUsername: string | null): ParsedCo
 }
 
 export async function handleUpdate(ctx: Ctx, update: Update): Promise<void> {
+  if (update.callback_query) {
+    // A tap on an imitation ballot. If it was the last vote, the day may now be complete.
+    const settings = await getSettings(ctx.db);
+    const votedDay = await handleVoteTap(ctx, settings, update.callback_query);
+    if (votedDay) await finishOrRefresh(ctx, settings, votedDay);
+    return;
+  }
   const msg = update.message;
   if (!msg) return;
   const settings = await getSettings(ctx.db);
@@ -177,6 +142,11 @@ export async function handleUpdate(ctx: Ctx, update: Update): Promise<void> {
   if (msg.chat.id !== settings.groupChatId) return;
   if (command.kind === "command") return groupCommand(ctx, msg, command.name, settings);
   if (!msg.from || msg.from.is_bot || msg.sender_chat) return;
+  if (isRecording(msg)) {
+    const day = await handleRecording(ctx, settings, msg, msg.from);
+    if (day) await finishOrRefresh(ctx, settings, day);
+    return;
+  }
   return groupResults(ctx, msg, msg.from, text, settings);
 }
 
@@ -354,6 +324,18 @@ async function privateCommand(ctx: Ctx, msg: Message, user: User, name: string, 
     case "regressio":
       await regressioAction(ctx, msg, user, msg.text ?? msg.caption ?? "");
       return;
+    case "ehdota":
+      await suggestCommand(ctx, msg, user, settings);
+      return;
+    case "ehdotukset":
+      await suggestionsCommand(ctx, msg);
+      return;
+    case "haaste":
+      await challengeCommand(ctx, msg);
+      return;
+    case "aanesta":
+      await ballotCommand(ctx, msg, user, settings);
+      return;
     case "setup":
       await reply(ctx, msg, "Send /setup in the group, not here.");
       return;
@@ -396,6 +378,18 @@ async function groupCommand(ctx: Ctx, msg: Message, name: string, settings: Sett
       if (msg.from && !msg.sender_chat) {
         await regressioAction(ctx, msg, msg.from, msg.text ?? msg.caption ?? "");
       }
+      return;
+    case "ehdota":
+      if (msg.from && !msg.sender_chat) await suggestCommand(ctx, msg, msg.from, settings);
+      return;
+    case "ehdotukset":
+      await suggestionsCommand(ctx, msg);
+      return;
+    case "haaste":
+      await challengeCommand(ctx, msg);
+      return;
+    case "aanesta":
+      if (msg.from && !msg.sender_chat) await ballotCommand(ctx, msg, msg.from, settings);
       return;
   }
 }
@@ -507,17 +501,6 @@ async function leaderboardText(ctx: Ctx): Promise<string> {
 }
 
 // ---------- results ----------
-
-async function isGroupMember(ctx: Ctx, groupId: number, userId: number): Promise<boolean> {
-  try {
-    const m = await ctx.tg.call<ChatMember>("getChatMember", { chat_id: groupId, user_id: userId });
-    return ["creator", "administrator", "member"].includes(m.status) || (m.status === "restricted" && m.is_member !== false);
-  } catch (err) {
-    // If Telegram can't tell us, let them in rather than block a friend.
-    console.warn("getChatMember failed", err instanceof Error ? err.message : err);
-    return true;
-  }
-}
 
 async function privateResults(ctx: Ctx, msg: Message, user: User, text: string, settings: Settings): Promise<void> {
   if (settings.groupChatId === null) {
@@ -653,7 +636,11 @@ async function recordResults(ctx: Ctx, user: User, results: ParsedResult[], rawI
 // ---------- board ----------
 
 async function boardText(ctx: Ctx, settings: Settings, day: string, closed: boolean): Promise<string> {
-  const [results, players] = await Promise.all([resultsForDay(ctx.db, day), allPlayers(ctx.db)]);
+  const [results, players, imitation] = await Promise.all([
+    resultsForDay(ctx.db, day),
+    allPlayers(ctx.db),
+    imitationForBoard(ctx.db, day),
+  ]);
   return renderBoard({
     day,
     results,
@@ -661,6 +648,7 @@ async function boardText(ctx: Ctx, settings: Settings, day: string, closed: bool
     closed,
     closeTime: ctx.closeTime,
     botUsername: settings.botUsername,
+    imitation,
   });
 }
 
@@ -723,14 +711,18 @@ export async function finalizeDay(ctx: Ctx, settings: Settings, day: string): Pr
   const dayRow = await getDay(ctx.db, day);
   if (dayRow?.finalized_at) return;
 
-  const results = await resultsForDay(ctx.db, day);
-  if (results.length === 0) {
+  const [results, imitation] = await Promise.all([resultsForDay(ctx.db, day), imitationForDay(ctx.db, day)]);
+  if (results.length === 0 && !imitation) {
     await markFinalized(ctx.db, day, ctx.now.toISOString());
     return;
   }
-  const standings = dayStandings(
-    results.map((r) => ({ playerId: r.player_id, game: r.game, score: r.score, maxScore: r.max_score })),
-  );
+  // The imitation contest counts as a fourth event: points received out of the most possible.
+  const dayResults: DayResult[] = [
+    ...results.map((r) => ({ playerId: r.player_id, game: r.game, score: r.score, maxScore: r.max_score })),
+    ...[...(imitation?.scores ?? [])].map(([playerId, s]) => ({ playerId, game: "imitation" as const, score: s.points, maxScore: s.max })),
+  ];
+  const maxTotal = (GAMES.length + (imitation ? 1 : 0)) * 100;
+  const standings = dayStandings(dayResults);
   const placements: PlacementRow[] = [];
   for (const [category, rows] of standings) {
     for (const s of rows) placements.push({ category, playerId: s.playerId, rank: s.rank, value: s.value });
@@ -746,22 +738,15 @@ export async function finalizeDay(ctx: Ctx, settings: Settings, day: string): Pr
 
   if (blowout.isBlowout) {
     const winnerName = names.get(blowout.winnerId) ?? `Player ${blowout.winnerId}`;
-    const winnerResults = results.filter((r) => r.player_id === blowout.winnerId);
-    const sorted = [...winnerResults].sort((a, b) => b.score / b.max_score - a.score / a.max_score);
+    const winnerResults = dayResults.filter((r) => r.playerId === blowout.winnerId);
+    const sorted = [...winnerResults].sort((a, b) => b.score / b.maxScore - a.score / a.maxScore);
     const regressedWinnerResults = sorted.slice(1);
-    const regressedScore = overallValue(
-      regressedWinnerResults.map((r) => ({
-        playerId: r.player_id,
-        game: r.game,
-        score: r.score,
-        maxScore: r.max_score,
-      })),
-    );
+    const regressedScore = overallValue(regressedWinnerResults);
 
-    const details = `Päivän pisteet: ${blowout.winnerScore.toFixed(1)} / 300
-Toiseksi tulleen pisteet: ${blowout.secondScore.toFixed(1)} / 300 (voittomarginaali: +${blowout.marginPercent.toFixed(1)} %)
-Karsittu päivän huippusuonenveto: ${sorted[0] ? `${sorted[0].game} (${sorted[0].score}/${sorted[0].max_score})` : "huippupeli"}
-Regressoidut pisteet: ${regressedScore.toFixed(1)} / 300`;
+    const details = `Päivän pisteet: ${blowout.winnerScore.toFixed(1)} / ${maxTotal}
+Toiseksi tulleen pisteet: ${blowout.secondScore.toFixed(1)} / ${maxTotal} (voittomarginaali: +${blowout.marginPercent.toFixed(1)} %)
+Karsittu päivän huippusuonenveto: ${sorted[0] ? `${sorted[0].game} (${sorted[0].score}/${sorted[0].maxScore})` : "huippupeli"}
+Regressoidut pisteet: ${regressedScore.toFixed(1)} / ${maxTotal}`;
 
     const aiRes = await generateExplanation(ctx.ai, winnerName, "blowout", details);
 
@@ -775,7 +760,7 @@ Regressoidut pisteet: ${regressedScore.toFixed(1)} / 300`;
     };
   }
 
-  await sendToGroup(ctx, settings, renderSummary({ day, standings, results, names, blowoutReport }));
+  await sendToGroup(ctx, settings, renderSummary({ day, standings, results, names, blowoutReport, imitation }));
   await markFinalized(ctx.db, day, ctx.now.toISOString());
   await refreshBoardSafely(ctx, settings, [day]); // flip the board to "closed"
 }
@@ -793,9 +778,17 @@ export async function tick(ctx: Ctx): Promise<void> {
 
   if (settings.groupChatId === null) return;
 
+  // The imitation contest first: draw the character, open the vote, and end votes whose day has closed,
+  // so a podium posted below already includes the imitation.
+  try {
+    await imitationTick(ctx, settings);
+  } catch (err) {
+    console.error("imitation contest step failed", err); // tried again next minute
+  }
+
   try {
     for (const day of await openDays(ctx.db)) {
-      if (dayIsClosed(ctx, day) || (await isDayComplete(ctx, day))) {
+      if (dayIsClosed(ctx, day) ? !(await imitationPending(ctx, day)) : await isDayComplete(ctx, day)) {
         await finalizeDay(ctx, settings, day);
       }
     }

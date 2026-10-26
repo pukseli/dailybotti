@@ -38,6 +38,9 @@ export interface Call {
   method: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   params: Record<string, any>;
+  /** What the fake answered, e.g. the sent message with its message_id. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  result?: any;
 }
 
 export class FakeTelegram implements Telegram {
@@ -63,10 +66,12 @@ export class FakeTelegram implements Telegram {
   }
 
   async call<T>(method: string, params: Record<string, unknown>): Promise<T> {
-    this.calls.push({ method, params });
+    const call: Call = { method, params };
+    this.calls.push(call);
     const i = this.failures.findIndex((f) => f.method === method && (!f.when || f.when(params)));
     if (i >= 0) throw this.failures.splice(i, 1)[0]!.error;
-    return this.answer(method, params) as T;
+    call.result = this.answer(method, params);
+    return call.result as T;
   }
 
   private answer(method: string, params: Record<string, unknown>): unknown {
@@ -119,12 +124,41 @@ export function inGroup(user: User, text: string, chatId = GROUP): Update {
   return { update_id: id, message: { message_id: id, from: user, chat: { id: chatId, type: "supergroup", title: "Games" }, text } };
 }
 
+/** A voice message posted in the group. */
+export function voiceInGroup(user: User, chatId = GROUP): Update {
+  const id = nextId++;
+  return {
+    update_id: id,
+    message: { message_id: id, from: user, chat: { id: chatId, type: "supergroup", title: "Games" }, voice: { file_id: `voice-${id}`, duration: 7 } },
+  };
+}
+
+/** A tap on an inline button in the bot's private message `messageId` to `user`. */
+export function tap(user: User, data: string, messageId: number): Update {
+  const id = nextId++;
+  return {
+    update_id: id,
+    callback_query: { id: `cq-${id}`, from: user, data, message: { message_id: messageId, chat: { id: user.id, type: "private" } } },
+  };
+}
+
 export function makeCtx(tg: FakeTelegram, now: string, overrides: Partial<Ctx> = {}): Ctx {
   return { db: env.DB, tg, now: new Date(now), timeZone: "Europe/Helsinki", closeTime: "00:00", ...overrides };
 }
 
 export async function resetDb(): Promise<void> {
   await env.DB.batch(
-    ["placements", "results", "days", "players", "settings"].map((t) => env.DB.prepare(`DELETE FROM ${t}`)),
+    // Children before parents: D1 enforces the foreign keys.
+    [
+      "imitation_votes",
+      "imitation_entries",
+      "imitation_days",
+      "imitation_suggestions",
+      "placements",
+      "results",
+      "days",
+      "players",
+      "settings",
+    ].map((t) => env.DB.prepare(`DELETE FROM ${t}`)),
   );
 }
