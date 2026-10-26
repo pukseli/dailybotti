@@ -358,6 +358,24 @@ describe("ballots", () => {
   });
 });
 
+describe("the seeded suggestion list", () => {
+  it("adds the 100 names, skips ones already suggested, and matches the bot's duplicate check", async () => {
+    await handleUpdate(makeCtx(tg, T0830), inGroup(anna, "/ehdota Mikki Hiiri"));
+    const seed = env.TEST_MIGRATIONS.find((m) => m.name.startsWith("0005_"))!;
+    for (const query of seed.queries) await env.DB.prepare(query).run();
+
+    const rows = await env.DB.prepare("SELECT name, added_by FROM imitation_suggestions").all<{ name: string; added_by: number }>();
+    expect(rows.results).toHaveLength(100);
+    expect(rows.results.find((r) => r.name === "Mikki Hiiri")!.added_by).toBe(anna.id); // the earlier one stays
+
+    // The seeded keys are lowercased like the bot does it, ä and ö included.
+    await handleUpdate(makeCtx(tg, T0830), inGroup(ben, "/ehdota KÄÄRIJÄ"));
+    expect(tg.lastTextTo(GROUP)).toBe("Käärijä on jo ehdotuslistalla.");
+    await handleUpdate(makeCtx(tg, T0830), inGroup(ben, "/ehdota vääpeli  KÖRMY"));
+    expect(tg.lastTextTo(GROUP)).toBe("Vääpeli Körmy on jo ehdotuslistalla.");
+  });
+});
+
 describe("scoring and help", () => {
   it("gives 3 and 1 points and leaves uncast ballots out of everyone's maximum", () => {
     const scores = imitationScores(
