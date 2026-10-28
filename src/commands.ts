@@ -27,6 +27,8 @@ export const GROUP_COMMANDS = [
   { command: "haaste", description: "Päivän imitaatiohaaste ja tilanne" },
   { command: "ehdota", description: "Ehdota hahmoa imitoitavaksi" },
   { command: "ehdotukset", description: "Imitaatioehdotukset" },
+  { command: "vote_leaderboard", description: "Äänestys väliaikatilanteen julkaisusta" },
+  { command: "finalize", description: "Äänestys päivän kisan sulkemisesta" },
   { command: "setup", description: "Link the bot to this group (admins)" },
   { command: "help", description: "Käyttö- ja käyttöönotto-ohjeet" },
 ];

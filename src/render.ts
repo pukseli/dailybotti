@@ -378,6 +378,37 @@ export function renderPlayerDayResults(opts: {
   return fit(lines);
 }
 
+/** !help (and /komennot): lists all available commands and their usage. */
+export function renderCommands(): string {
+  const lines = [
+    "📖 <b>Käytössä olevat komennot</b>",
+    "",
+    "<b>Pelit ja tilastot</b>",
+    "• <code>/today</code> – Päivän pelitaulu (ryhmässä siirtää taulun keskustelun alareunaan)",
+    "• <code>/tulos [pelaaja] [peli] [eilen | YYYY-MM-DD | #nro]</code> (tai <code>/tulokset</code>) – Pelaajan pelitulos kierroksittain (omat tulokset päivän ollessa auki, kaikkien tulokset päivän sulkeuduttua)",
+    "• <code>/me</code> – Omat tilastot, mitalit, keskiarvot ja ennätykset",
+    "• <code>/leaderboard</code> – Kaikkien aikojen tilanne ja lajivoitot",
+    "• <code>/regressio [pelaaja | kärki]</code> – Hajonta- ja outlier-analyysi (ilman nimeä tilastokärjestä, nimen kanssa valitusta pelaajasta, tai vastauksena viestiin sen tuloksesta)",
+    "",
+    "<b>Päivän äänestykset (ryhmässä)</b>",
+    "• <code>!vote-leaderboard</code> (tai <code>/vote_leaderboard</code>) – Käynnistä äänestys päivän väliaikatilanteen julkaisusta (vaatii 4 Joo-ääntä)",
+    "• <code>!vote-leaderboard finalize</code> (tai <code>/finalize</code>) – Käynnistä äänestys päivän kisan lopullisesta sulkemisesta ja tulosten julkaisusta (toimii myös vastaamalla väliaikatilanteeseen <code>finalize</code>, <code>sulje</code> tai <code>lopullinen</code>)",
+    "",
+    "<b>🎭 Imitaatiokisa</b>",
+    "• <code>/haaste</code> – Päivän imitaatiohaaste, saapuneet äänitteet ja äänestyksen tilanne",
+    "• <code>/ehdota Nimi</code> – Lisää uusi hahmo tai henkilö imitaatioiden arvontalistalle",
+    "• <code>/ehdotukset</code> – Listaa arvonnassa jäljellä olevat imitaatioehdotukset",
+    "• <code>/aanesta</code> – Pyydä uusi äänestyslippu yksityisviestinä äänestyksen ollessa käynnissä",
+    "",
+    "<b>Asetukset ja ohjeet</b>",
+    "• <code>/name Uusi nimi</code> (tai <code>/nimi</code>) – Vaihda nimesi tauluun, palkintopalleille ja tilastoihin (<code>/name reset</code> palauttaa Telegram-nimen)",
+    "• <code>!help</code> (tai <code>/komennot</code>) – Tämä komentolistaus",
+    "• <code>/help</code> (tai <code>/start</code>) – Kattavat peliohjeet, säännöt ja käyttöönotto-ohjeet",
+    "• <code>/setup</code> – Yhdistä botti ryhmään (vain ryhmän ylläpitäjille)",
+  ];
+  return fit(lines);
+}
+
 /** /help and /start: how to take part, the rules, the commands and how to set the bot up in a group. */
 export function renderHelp(opts: { closeTime: string; timeZone: string; linked: boolean }): string {
   const closes = opts.closeTime === "00:00" ? "keskiyöllä" : `klo ${opts.closeTime}`;
@@ -398,13 +429,15 @@ export function renderHelp(opts: { closeTime: string; timeZone: string; linked: 
     "• Kokonaispisteet: jokainen peli prosentteina maksimistaan, yhteensä enintään 300, tai 400 kun päivällä on imitaatiohaaste. Pelaamatta jäänyt peli on 0.",
     "",
     "<b>Komennot</b>",
+    "!help (tai /komennot) – luettelee kaikki käytössä olevat komennot",
     "/today – päivän taulu",
-    "/tulos [pelaaja] [peli] – pelaajan pelitulos kierroksittain (omat tulokset päivän ollessa auki, kaikkien tulokset päivän sulkeuduttua)",
+    "/tulos [pelaaja] [peli] [eilen | YYYY-MM-DD | #nro] (tai /tulokset) – pelaajan pelitulos kierroksittain (omat tulokset päivän ollessa auki, kaikkien tulokset päivän sulkeuduttua)",
     "/me – omat tilastosi",
     "/leaderboard – kaikkien aikojen tilanne",
     "/regressio – hajonta-analyysi: ilman nimeä kärjestä, nimen kanssa siitä pelaajasta, tai vastauksena viestiin sen tuloksesta",
-    "/name Uusi nimi – vaihda nimesi tauluun, palkintopalleille ja tilastoihin. /name reset palauttaa Telegram-nimen",
-    "!vote-leaderboard – käynnistä äänestys päivän väliaikatilanteen julkaisusta (tai !vote-leaderboard finalize päivän sulkemisesta)",
+    "/name Uusi nimi (tai /nimi) – vaihda nimesi tauluun, palkintopalleille ja tilastoihin. /name reset palauttaa Telegram-nimen",
+    "!vote-leaderboard (tai /vote_leaderboard) – käynnistä äänestys päivän väliaikatilanteen julkaisusta (tai !vote-leaderboard finalize / /finalize päivän sulkemisesta)",
+    "/setup – yhdistä botti ryhmään (vain ylläpitäjille)",
     "/help – tämä ohje",
     "",
     "<b>🎭 Imitaatiokisa</b>",

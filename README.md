@@ -118,10 +118,15 @@ The early podium (posted when everyone has played everything) waits for the vote
 
 | Command | Where | What it does |
 |---|---|---|
+| `!help`, `/komennot` | both | Lists all available commands and their usage (in Finnish). Works in a group before `/setup` too |
 | `/start`, `/help` | both | How to take part, the rules, the commands and the group setup steps (in Finnish). Works in a group before `/setup` too |
 | `/today` | both | Today's board. In the group it moves the board to the bottom of the chat |
-| `/me` | both | Your medals, averages and bests |
-| `/leaderboard` | both | All-time standings |
+| `/tulos [pelaaja] [peli] [eilen \| YYYY-MM-DD \| #nro]` (or `/tulokset`) | both | Round-by-round breakdown of a player's game results (Eraly, Krillion, Size It Up). While the day is open, you can only view your own results; once closed, anyone's results can be viewed |
+| `/me` | both | Your medals, averages and bests across overall, individual games, and imitation |
+| `/leaderboard` | both | All-time standings and individual game gold medal counts |
+| `/regressio [pelaaja \| kärki]` | both | Statistical outlier analysis (Hajontakomissio): strips top 20% flukes and generates AI commentary. Without arguments (or `kärki`/`top`) targets the leaderboard leader; with a player name/username targets that player; as a reply to a message analyzes that message's results or its sender |
+| `!vote-leaderboard` (or `/vote_leaderboard`) | group | Starts a group vote (requires 4 Yes votes) to publish interim standings (`⏱️ Väliaikatilanne`) while keeping the day open |
+| `!vote-leaderboard finalize` (or `/finalize`) | group | Starts a group vote (requires 4 Yes votes) to close the day early and publish final podiums. Can also be triggered by replying `finalize`, `sulje`, or `lopullinen` to an interim standings message |
 | `/name New name` (or `/nimi`) | both | Changes your name on the board, podiums, leaderboard and stats. `/name reset` goes back to your Telegram name. Available after your first result |
 | `/haaste` | both | Today's imitation character, who has sent a recording, and how the vote is going |
 | `/ehdota Nimi` | both | Adds a character or person to the imitation draw |

@@ -58,6 +58,7 @@ import {
   displayNames,
   escapeHtml,
   renderBoard,
+  renderCommands,
   renderHelp,
   renderLeaderboard,
   renderPlayerDayResults,
@@ -122,6 +123,13 @@ export function parseCommand(text: string, botUsername: string | null): ParsedCo
   return { kind: "command", name: m[1]!.toLowerCase() };
 }
 
+function parseBangHelp(text: string, botUsername: string | null): "none" | "other-bot" | "match" {
+  const m = /^!(?:help|komennot)(?:@([A-Za-z0-9_]+))?(?:\s|$)/i.exec(text.trim());
+  if (!m) return "none";
+  if (m[1] && botUsername && m[1].toLowerCase() !== botUsername.toLowerCase()) return "other-bot";
+  return "match";
+}
+
 export async function handleUpdate(ctx: Ctx, update: Update): Promise<void> {
   if (update.callback_query) {
     const settings = await getSettings(ctx.db);
@@ -146,9 +154,15 @@ export async function handleUpdate(ctx: Ctx, update: Update): Promise<void> {
   const text = msg.text ?? msg.caption ?? "";
   const command = parseCommand(text, settings.botUsername);
   if (command.kind === "other-bot") return;
+  const bangHelp = parseBangHelp(text, settings.botUsername);
+  if (bangHelp === "other-bot") return;
 
   if (msg.chat.type === "private") {
     if (!msg.from || msg.from.is_bot) return;
+    if (bangHelp === "match") {
+      await reply(ctx, msg, renderCommands());
+      return;
+    }
     if (command.kind === "command") return privateCommand(ctx, msg, msg.from, command.name, settings);
     return privateResults(ctx, msg, msg.from, text, settings);
   }
@@ -159,6 +173,10 @@ export async function handleUpdate(ctx: Ctx, update: Update): Promise<void> {
     // Answered before /setup too, since that's when the setup steps are needed.
     const linked = msg.chat.id === settings.groupChatId;
     await reply(ctx, msg, renderHelp({ closeTime: ctx.closeTime, timeZone: ctx.timeZone, linked }));
+    return;
+  }
+  if (bangHelp === "match" || (command.kind === "command" && command.name === "komennot")) {
+    await reply(ctx, msg, renderCommands());
     return;
   }
   if (msg.chat.id !== settings.groupChatId) return;
@@ -470,6 +488,9 @@ async function privateCommand(ctx: Ctx, msg: Message, user: User, name: string, 
       return;
     case "aanesta":
       await ballotCommand(ctx, msg, user, settings);
+      return;
+    case "komennot":
+      await reply(ctx, msg, renderCommands());
       return;
     case "setup":
       await reply(ctx, msg, "Send /setup in the group, not here.");

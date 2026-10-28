@@ -156,6 +156,33 @@ describe("private results", () => {
     expect(tg.lastTextTo(GROUP)).not.toContain("En ole vielä yhdistetty");
   });
 
+  it("answers !help and /komennot with a list of all available commands in group and private chats", async () => {
+    await linkGroup();
+    for (const cmd of ["!help", "/komennot"]) {
+      await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(ben, cmd));
+      const groupList = tg.lastTextTo(GROUP);
+      expect(groupList).toContain("📖 <b>Käytössä olevat komennot</b>");
+      expect(groupList).toContain("<code>/today</code>");
+      expect(groupList).toContain("<code>/tulos");
+      expect(groupList).toContain("<code>/me</code>");
+      expect(groupList).toContain("<code>/leaderboard</code>");
+      expect(groupList).toContain("<code>/regressio");
+      expect(groupList).toContain("<code>!vote-leaderboard</code>");
+      expect(groupList).toContain("<code>!vote-leaderboard finalize</code>");
+      expect(groupList).toContain("<code>/haaste</code>");
+      expect(groupList).toContain("<code>/ehdota Nimi</code>");
+      expect(groupList).toContain("<code>/ehdotukset</code>");
+      expect(groupList).toContain("<code>/aanesta</code>");
+      expect(groupList).toContain("<code>/name Uusi nimi</code>");
+      expect(groupList).toContain("<code>!help</code>");
+      expect(groupList).toContain("<code>/help</code>");
+      expect(groupList).toContain("<code>/setup</code>");
+    }
+
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, "!help"));
+    expect(tg.lastTextTo(anna.id)).toContain("📖 <b>Käytössä olevat komennot</b>");
+  });
+
   it("counts only the first result per game and day", async () => {
     await linkGroup();
     await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, eralyShare(8, 500)));
