@@ -1,7 +1,7 @@
 // Message texts. Everything is sent with parse_mode HTML, so user-provided text goes through escapeHtml.
 
 import type { PlayerRow, ResultRow, StatsRow, VoteState } from "./db";
-import { GAMES, gameTitle } from "./games";
+import { GAMES, KRILLION_SYMBOL_POINTS, gameById, gameTitle, parseRoundData, type GameId } from "./games";
 import type { DayImitation } from "./imitation";
 import type { BlowoutReport, RegressioReport } from "./regressio";
 import { MEDALS, placeMark, type Category, type Standing } from "./scoring";
@@ -271,6 +271,113 @@ export function renderPlayerStats(name: string, stats: StatsRow[]): string {
   return lines.join("\n");
 }
 
+function parseStoredRounds(res: ResultRow): (number | string)[] | null {
+  if (res.rounds_json) {
+    try {
+      const parsed = JSON.parse(res.rounds_json);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    } catch {
+      // Fall through to raw_text
+    }
+  }
+  if (res.raw_text) {
+    return parseRoundData(res.raw_text, res.game).rounds;
+  }
+  return null;
+}
+
+export function renderPlayerDayResults(opts: {
+  playerName: string;
+  day: string;
+  results: ResultRow[];
+  gameFilter?: GameId | null;
+}): string {
+  const { playerName, day, results, gameFilter } = opts;
+  const header = `🎯 <b>${escapeHtml(playerName)} · ${dayLabel(day)}</b>`;
+
+  if (gameFilter) {
+    const game = gameById(gameFilter)!;
+    const res = results.find((r) => r.game === gameFilter);
+    if (!res) {
+      return `${header}\n\n<i>Ei tallennettua tulosta pelistä ${escapeHtml(gameTitle(game, day))}.</i>`;
+    }
+  } else if (results.length === 0) {
+    return `${header}\n\n<i>Ei tallennettuja tuloksia tälle päivälle.</i>`;
+  }
+
+  const lines = [header];
+  const gamesToShow = gameFilter ? GAMES.filter((g) => g.id === gameFilter) : GAMES;
+
+  for (const game of gamesToShow) {
+    const res = results.find((r) => r.game === game.id);
+    if (!res) continue;
+
+    const title = res.puzzle !== null ? `${game.name} #${res.puzzle}` : gameTitle(game, day);
+    lines.push("", `<b>${escapeHtml(title)}</b> · ${res.score}/${res.max_score}`);
+
+    if (game.id === "krillion") {
+      const rounds = parseStoredRounds(res);
+      if (rounds && rounds.length > 0) {
+        const symbols = rounds.map(String);
+        lines.push(escapeHtml(symbols.join("")));
+        const breakdown = symbols.map((sym, idx) => {
+          const pts = KRILLION_SYMBOL_POINTS[sym];
+          return pts !== undefined ? `${idx + 1}. ${escapeHtml(sym)} ${pts}p` : `${idx + 1}. ${escapeHtml(sym)}`;
+        });
+        lines.push(breakdown.join(" · "));
+      } else if (res.raw_text) {
+        const rawLines = res.raw_text
+          .split("\n")
+          .map((l) => l.trim())
+          .filter((l) => l && !/^Krillion/i.test(l) && !/^\d+$/.test(l) && !/^https?:\/\//i.test(l));
+        for (const l of rawLines) lines.push(escapeHtml(l));
+      }
+    } else if (game.id === "sizeitup") {
+      const rawRoundLines = res.raw_text
+        ? res.raw_text
+            .split("\n")
+            .map((l) => l.trim())
+            .filter((l) => /^[🟥⬜]{5}\s+\d+(?:[.,]\d+)?\*?$/.test(l))
+        : [];
+      if (rawRoundLines.length > 0) {
+        rawRoundLines.forEach((l, idx) => {
+          lines.push(`${idx + 1}. ${escapeHtml(l)}`);
+        });
+        const noteLine = res.raw_text
+          ?.split("\n")
+          .map((l) => l.trim())
+          .find((l) => l.startsWith("*"));
+        if (noteLine) lines.push(`<i>${escapeHtml(noteLine)}</i>`);
+      } else {
+        const rounds = parseStoredRounds(res);
+        if (rounds && rounds.length > 0) {
+          rounds.forEach((val, idx) => {
+            const num = Number(val);
+            const reds = Math.max(0, Math.min(5, Math.round(num / 20)));
+            const bar = "🟥".repeat(reds) + "⬜".repeat(5 - reds);
+            lines.push(`${idx + 1}. ${bar} ${num}`);
+          });
+        }
+      }
+    } else if (game.id === "eraly") {
+      if (res.raw_text) {
+        const rawLines = res.raw_text
+          .split("\n")
+          .map((l) => l.trim())
+          .filter((l) => l && !/^https?:\/\//i.test(l));
+        for (const rawLine of rawLines) {
+          const stripped = rawLine.replace(/^Eraly\s*#\s*\d+\s*(?:·|-)?\s*/i, "").trim();
+          if (stripped && !/^(?:Score:\s*)?\d+\s*\/\s*700$/i.test(stripped)) {
+            lines.push(escapeHtml(stripped));
+          }
+        }
+      }
+    }
+  }
+
+  return fit(lines);
+}
+
 /** /help and /start: how to take part, the rules, the commands and how to set the bot up in a group. */
 export function renderHelp(opts: { closeTime: string; timeZone: string; linked: boolean }): string {
   const closes = opts.closeTime === "00:00" ? "keskiyöllä" : `klo ${opts.closeTime}`;
@@ -292,6 +399,7 @@ export function renderHelp(opts: { closeTime: string; timeZone: string; linked: 
     "",
     "<b>Komennot</b>",
     "/today – päivän taulu",
+    "/tulos [pelaaja] [peli] – pelaajan pelitulos kierroksittain (omat tulokset päivän ollessa auki, kaikkien tulokset päivän sulkeuduttua)",
     "/me – omat tilastosi",
     "/leaderboard – kaikkien aikojen tilanne",
     "/regressio – hajonta-analyysi: ilman nimeä kärjestä, nimen kanssa siitä pelaajasta, tai vastauksena viestiin sen tuloksesta",

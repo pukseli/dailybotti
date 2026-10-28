@@ -150,6 +150,13 @@ export async function allResultsForPlayer(db: D1Database, playerId: number): Pro
   return results;
 }
 
+export async function latestDayWithResults(db: D1Database, beforeDay?: string): Promise<string | null> {
+  const row = beforeDay
+    ? await db.prepare("SELECT MAX(day) AS day FROM results WHERE day < ?").bind(beforeDay).first<{ day: string | null }>()
+    : await db.prepare("SELECT MAX(day) AS day FROM results").first<{ day: string | null }>();
+  return row?.day ?? null;
+}
+
 export interface DayRow {
   day: string;
   board_message_id: number | null;

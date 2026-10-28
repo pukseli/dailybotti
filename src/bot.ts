@@ -9,6 +9,7 @@ import {
   getSettings,
   getVoteState,
   insertResult,
+  latestDayWithResults,
   markFinalized,
   openDays,
   resultsForDay,
@@ -44,7 +45,7 @@ import {
   suggestCommand,
   suggestionsCommand,
 } from "./imitation";
-import { GAMES, dayForResult, gameById, parseResults, parseRoundData, type ParsedResult } from "./games";
+import { GAMES, dayForResult, gameById, matchGameArg, parseResults, parseRoundData, type GameId, type ParsedResult } from "./games";
 import {
   calculateRegression,
   checkBlowout,
@@ -59,6 +60,7 @@ import {
   renderBoard,
   renderHelp,
   renderLeaderboard,
+  renderPlayerDayResults,
   renderPlayerStats,
   renderRegressio,
   renderSummary,
@@ -324,6 +326,110 @@ Regressoitu todellinen taso: ${stats.regressedAverage.toFixed(1)} / 5.0 (pudotus
   await reply(ctx, msg, renderRegressio(report));
 }
 
+async function tulosCommand(ctx: Ctx, msg: Message, caller: User, text: string): Promise<void> {
+  const players = await allPlayers(ctx.db);
+  const names = displayNames(players);
+
+  const rawArg = text
+    .replace(/^\/[a-zA-Z0-9_]+(@[a-zA-Z0-9_]+)?\s*/i, "")
+    .replace(/\bsize\s+it\s+up\b/gi, "sizeitup")
+    .trim();
+
+  const tokens = rawArg ? rawArg.split(/\s+/) : [];
+  let gameFilter: GameId | null = null;
+  let explicitDay: string | null = null;
+  let explicitPuzzle: number | null = null;
+  const playerTokens: string[] = [];
+
+  for (const token of tokens) {
+    const matchedGame = matchGameArg(token);
+    if (matchedGame && !gameFilter) {
+      gameFilter = matchedGame;
+      continue;
+    }
+    const lower = token.toLowerCase();
+    if (lower === "eilen" || lower === "yesterday") {
+      explicitDay = addDays(today(ctx), -1);
+      continue;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(token)) {
+      explicitDay = token;
+      continue;
+    }
+    const puzzleMatch = /^#(\d+)$/.exec(token);
+    if (puzzleMatch) {
+      explicitPuzzle = Number(puzzleMatch[1]);
+      continue;
+    }
+    playerTokens.push(token);
+  }
+
+  let target = { id: caller.id, name: names.get(caller.id) ?? caller.first_name };
+  if (playerTokens.length > 0) {
+    const playerArg = playerTokens.join(" ");
+    const cleanPlayer = playerArg.replace(/^@/, "").trim().toLowerCase();
+    const match = players.find(
+      (p) =>
+        (p.username && p.username.toLowerCase() === cleanPlayer) ||
+        (p.display_name && p.display_name.trim().toLowerCase() === cleanPlayer) ||
+        p.first_name.toLowerCase() === cleanPlayer ||
+        (names.get(p.id) && names.get(p.id)!.toLowerCase() === cleanPlayer),
+    );
+    if (match) {
+      target = { id: match.id, name: names.get(match.id) ?? match.first_name };
+    } else if (
+      caller.first_name.toLowerCase() === cleanPlayer ||
+      (caller.username && caller.username.toLowerCase() === cleanPlayer)
+    ) {
+      target = { id: caller.id, name: names.get(caller.id) ?? caller.first_name };
+    } else {
+      await reply(
+        ctx,
+        msg,
+        `Pelaajaa tai peliä "${escapeHtml(playerArg)}" ei löytynyt. Käyttö: <code>/tulos [pelaaja] [peli]</code>`,
+      );
+      return;
+    }
+  }
+
+  let day: string;
+  if (explicitDay) {
+    day = explicitDay;
+  } else if (explicitPuzzle !== null) {
+    if (gameFilter && gameById(gameFilter)?.firstDay) {
+      day = dayForResult({ game: gameFilter, puzzle: explicitPuzzle, score: 0 }, today(ctx));
+    } else {
+      const allTarget = await allResultsForPlayer(ctx.db, target.id);
+      const found = allTarget.find((r) => r.puzzle === explicitPuzzle && (!gameFilter || r.game === gameFilter));
+      day = found?.day ?? today(ctx);
+    }
+  } else {
+    const todayDay = today(ctx);
+    const [todayResults, todayRow] = await Promise.all([resultsForDay(ctx.db, todayDay), getDay(ctx.db, todayDay)]);
+    if (todayResults.length > 0 || todayRow?.finalized_at) {
+      day = todayDay;
+    } else {
+      const prevDay = await latestDayWithResults(ctx.db, todayDay);
+      day = prevDay ?? todayDay;
+    }
+  }
+
+  const dayRow = await getDay(ctx.db, day);
+  const isClosedDay = dayIsClosed(ctx, day) || Boolean(dayRow?.finalized_at);
+
+  if (!isClosedDay && target.id !== caller.id) {
+    await reply(
+      ctx,
+      msg,
+      "🔒 Päivän pelit ovat vielä auki. Voit tarkastella muiden pelaajien tuloksia vasta, kun päivän pelit on suljettu.",
+    );
+    return;
+  }
+
+  const dayResults = (await resultsForDay(ctx.db, day)).filter((r) => r.player_id === target.id);
+  await reply(ctx, msg, renderPlayerDayResults({ playerName: target.name, day, results: dayResults, gameFilter }));
+}
+
 async function privateCommand(ctx: Ctx, msg: Message, user: User, name: string, settings: Settings): Promise<void> {
   switch (name) {
     case "today": {
@@ -336,6 +442,10 @@ async function privateCommand(ctx: Ctx, msg: Message, user: User, name: string, 
       await reply(ctx, msg, await boardText(ctx, settings, day, false));
       return;
     }
+    case "tulos":
+    case "tulokset":
+      await tulosCommand(ctx, msg, user, msg.text ?? msg.caption ?? "");
+      return;
     case "me":
       await reply(ctx, msg, renderPlayerStats(await playerName(ctx, user), await statsForPlayer(ctx.db, user.id)));
       return;
@@ -387,6 +497,12 @@ async function groupCommand(ctx: Ctx, msg: Message, name: string, settings: Sett
       await refreshBoard(ctx, settings, day);
       return;
     }
+    case "tulos":
+    case "tulokset":
+      if (msg.from && !msg.sender_chat) {
+        await tulosCommand(ctx, msg, msg.from, msg.text ?? msg.caption ?? "");
+      }
+      return;
     case "me":
       if (msg.from && !msg.sender_chat) {
         await reply(ctx, msg, renderPlayerStats(await playerName(ctx, msg.from), await statsForPlayer(ctx.db, msg.from.id)));

@@ -24,6 +24,24 @@ export function gameById(id: string): Game | undefined {
   return GAMES.find((g) => g.id === id);
 }
 
+export const KRILLION_SYMBOL_POINTS: Record<string, number> = {
+  "⬛": 0,
+  "🫧": 10,
+  "🤡": 15,
+  "🐟": 30,
+  "🦑": 60,
+  "🏮": 85,
+  "🌟": 100,
+};
+
+export function matchGameArg(token: string): GameId | null {
+  const clean = token.trim().toLowerCase().replace(/[-_\s]+/g, "");
+  if (clean === "eraly") return "eraly";
+  if (clean === "krillion" || clean === "krill") return "krillion";
+  if (clean === "sizeitup" || clean === "size" || clean === "magnitudle") return "sizeitup";
+  return null;
+}
+
 export interface ParsedResult {
   game: GameId;
   puzzle: number | null;

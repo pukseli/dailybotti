@@ -872,3 +872,70 @@ describe("!vote-leaderboard", () => {
     expect(dayRow?.f).not.toBeNull();
   });
 });
+
+describe("/tulos", () => {
+  it("shows caller's own per-round results while the day is open, and blocks querying others until closed", async () => {
+    await linkGroup();
+    await handleUpdate(
+      makeCtx(tg, FRI_NOON),
+      dm(anna, [eralyShare(8, 640), krillionShare(100, 540), sizeItUpShare(402)].join("\n\n")),
+    );
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, krillionShare(100, 300)));
+    tg.clear();
+
+    // Anna can view her own Krillion breakdown while the day is still open
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/tulos krillion"));
+    const annaKrill = tg.lastTextTo(GROUP);
+    expect(annaKrill).toContain("🎯 <b>Anna · Fri 23 Oct</b>");
+    expect(annaKrill).toContain("<b>Krillion #100</b> · 540/700");
+    expect(annaKrill).toContain("🫧🐟🦑🏮🌟⬛🤡");
+    expect(annaKrill).toContain("1. 🫧 10p · 2. 🐟 30p · 3. 🦑 60p · 4. 🏮 85p · 5. 🌟 100p · 6. ⬛ 0p · 7. 🤡 15p");
+
+    // Anna can also view all her own games for today with /tulos
+    tg.clear();
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, "/tulos"));
+    const annaAll = tg.lastTextTo(anna.id);
+    expect(annaAll).toContain("<b>Eraly #8</b> · 640/700");
+    expect(annaAll).toContain("I travelled to 1450 AD");
+    expect(annaAll).toContain("<b>Krillion #100</b> · 540/700");
+    expect(annaAll).toContain("<b>Size It Up</b> · 402/500");
+    expect(annaAll).toContain("1. 🟥🟥🟥🟥⬜ 80");
+
+    // Ben tries to poll Anna's Krillion while the day is still open -> blocked!
+    tg.clear();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(ben, "/tulos Anna krillion"));
+    expect(tg.lastTextTo(GROUP)).toContain("🔒 Päivän pelit ovat vielä auki.");
+    expect(tg.lastTextTo(GROUP)).not.toContain("540/700");
+
+    // After the day closes at midnight, Ben can poll Anna's Krillion and Size It Up
+    tg.clear();
+    await tick(makeCtx(tg, SAT_0000));
+    tg.clear();
+
+    await handleUpdate(makeCtx(tg, SAT_0001), inGroup(ben, "/tulos Anna krillion"));
+    const afterClose = tg.lastTextTo(GROUP);
+    expect(afterClose).toContain("🎯 <b>Anna · Fri 23 Oct</b>");
+    expect(afterClose).toContain("<b>Krillion #100</b> · 540/700");
+    expect(afterClose).toContain("1. 🫧 10p");
+
+    // Order of arguments doesn't matter (/tulos sizeitup Anna)
+    tg.clear();
+    await handleUpdate(makeCtx(tg, SAT_0001), inGroup(ben, "/tulos sizeitup Anna"));
+    expect(tg.lastTextTo(GROUP)).toContain("<b>Size It Up</b> · 402/500");
+    expect(tg.lastTextTo(GROUP)).toContain("1. 🟥🟥🟥🟥⬜ 80");
+  });
+
+  it("allows polling anyone's results on the same day once the day is finalized", async () => {
+    await linkGroup();
+    const allThree = [eralyShare(8, 640), krillionShare(100, 540), sizeItUpShare(402)].join("\n\n");
+    for (const u of [anna, ben, chris, dan]) {
+      await handleUpdate(makeCtx(tg, FRI_NOON), dm(u, allThree));
+    }
+    tg.clear();
+
+    // All 4 players finished -> Friday is finalized even at FRI_EVENING
+    await handleUpdate(makeCtx(tg, FRI_EVENING), inGroup(ben, "/tulos Anna eraly"));
+    expect(tg.lastTextTo(GROUP)).toContain("🎯 <b>Anna · Fri 23 Oct</b>");
+    expect(tg.lastTextTo(GROUP)).toContain("<b>Eraly #8</b> · 640/700");
+  });
+});

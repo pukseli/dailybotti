@@ -5,6 +5,7 @@ import type { Telegram } from "./telegram";
 
 export const PRIVATE_COMMANDS = [
   { command: "today", description: "Today's board" },
+  { command: "tulos", description: "Pelaajan pelitulos kierroksittain" },
   { command: "me", description: "Your stats" },
   { command: "leaderboard", description: "All-time standings" },
   { command: "regressio", description: "Hajonta- ja outlier-analyysi" },
@@ -18,6 +19,7 @@ export const PRIVATE_COMMANDS = [
 
 export const GROUP_COMMANDS = [
   { command: "today", description: "Show today's board at the bottom of the chat" },
+  { command: "tulos", description: "Pelaajan pelitulos kierroksittain" },
   { command: "leaderboard", description: "All-time standings" },
   { command: "me", description: "Your stats" },
   { command: "regressio", description: "Hajonta- ja outlier-analyysi" },
