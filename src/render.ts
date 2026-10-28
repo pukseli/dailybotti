@@ -1,10 +1,11 @@
 // Message texts. Everything is sent with parse_mode HTML, so user-provided text goes through escapeHtml.
 
-import type { PlayerRow, ResultRow, StatsRow } from "./db";
+import type { PlayerRow, ResultRow, StatsRow, VoteState } from "./db";
 import { GAMES, gameTitle } from "./games";
 import type { DayImitation } from "./imitation";
 import type { BlowoutReport, RegressioReport } from "./regressio";
 import { MEDALS, placeMark, type Category, type Standing } from "./scoring";
+import type { InlineKeyboardMarkup } from "./telegram";
 import { dayLabel } from "./time";
 
 const MAX_LENGTH = 4000; // Telegram allows 4096 characters per message
@@ -109,9 +110,10 @@ export function renderSummary(opts: {
   blowoutReport?: BlowoutReport | null;
   /** The day's imitation result, when it counts towards the overall score. */
   imitation?: DayImitation | null;
+  interim?: boolean;
 }): string {
-  const { day, standings, results, names, blowoutReport, imitation } = opts;
-  const lines = [`🏁 <b>Results · ${dayLabel(day)}</b>`];
+  const { day, standings, results, names, blowoutReport, imitation, interim } = opts;
+  const lines = [interim ? `⏱️ <b>Väliaikatilanne · ${dayLabel(day)}</b>` : `🏁 <b>Results · ${dayLabel(day)}</b>`];
   for (const game of GAMES) {
     lines.push("", `<b>${escapeHtml(gameTitle(game, day))}</b>`);
     const rows = standings.get(game.id) ?? [];
@@ -142,8 +144,47 @@ export function renderSummary(opts: {
       `<i>"${escapeHtml(blowoutReport.explanation)}"</i>`,
     );
   }
-  lines.push("", "/leaderboard for all-time standings");
+  if (interim) {
+    lines.push(
+      "",
+      '<i>Päivän kisa on vielä auki. Vastaa tähän viestiin "finalize" käynnistääksesi äänestyksen päivän lopullisesta sulkemisesta.</i>',
+    );
+  } else {
+    lines.push("", "/leaderboard for all-time standings");
+  }
   return fit(lines);
+}
+
+export function renderVoteMessage(state: VoteState, threshold = 4): string {
+  const yesNames = Object.values(state.yes);
+  const noNames = Object.values(state.no);
+  const header = state.completed
+    ? state.mode === "finalize"
+      ? `✅ <b>Äänestys hyväksytty (${yesNames.length}/${threshold}) – suljetaan päivän kisa ja julkaistaan lopulliset tulokset!</b>`
+      : `✅ <b>Äänestys hyväksytty (${yesNames.length}/${threshold}) – julkaistaan väliaikatilanne!</b>`
+    : state.mode === "finalize"
+      ? `🗳️ <b>Äänestys: Suljetaanko päivän kisa ja julkaistaan lopulliset tulokset? (${dayLabel(state.day)})</b>\nVaaditaan ${threshold} Joo-ääntä.`
+      : `🗳️ <b>Äänestys: Julkaistaanko päivän väliaikatilanne? (${dayLabel(state.day)})</b>\nVaaditaan ${threshold} Joo-ääntä.`;
+
+  return [
+    header,
+    "",
+    `👍 <b>Joo (${yesNames.length}/${threshold}):</b> ${yesNames.length ? yesNames.map(escapeHtml).join(", ") : "–"}`,
+    `👎 <b>Ei (${noNames.length}):</b> ${noNames.length ? noNames.map(escapeHtml).join(", ") : "–"}`,
+  ].join("\n");
+}
+
+export function renderVoteKeyboard(state: VoteState, threshold = 4): InlineKeyboardMarkup {
+  const yesCount = Object.keys(state.yes).length;
+  const noCount = Object.keys(state.no).length;
+  return {
+    inline_keyboard: [
+      [
+        { text: `👍 Joo (${yesCount}/${threshold})`, callback_data: `vote:${state.mode}:yes` },
+        { text: `👎 Ei (${noCount})`, callback_data: `vote:${state.mode}:no` },
+      ],
+    ],
+  };
 }
 
 export function renderRegressio(report: RegressioReport): string {
@@ -255,6 +296,7 @@ export function renderHelp(opts: { closeTime: string; timeZone: string; linked: 
     "/leaderboard – kaikkien aikojen tilanne",
     "/regressio – hajonta-analyysi: ilman nimeä kärjestä, nimen kanssa siitä pelaajasta, tai vastauksena viestiin sen tuloksesta",
     "/name Uusi nimi – vaihda nimesi tauluun, palkintopalleille ja tilastoihin. /name reset palauttaa Telegram-nimen",
+    "!vote-leaderboard – käynnistä äänestys päivän väliaikatilanteen julkaisusta (tai !vote-leaderboard finalize päivän sulkemisesta)",
     "/help – tämä ohje",
     "",
     "<b>🎭 Imitaatiokisa</b>",

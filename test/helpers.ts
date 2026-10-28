@@ -142,6 +142,19 @@ export function tap(user: User, data: string, messageId: number): Update {
   };
 }
 
+export function clickButton(user: User, data: string, messageId: number, chatId = GROUP): Update {
+  const id = nextId++;
+  return {
+    update_id: id,
+    callback_query: {
+      id: `cb_${id}`,
+      from: user,
+      message: { message_id: messageId, chat: { id: chatId, type: "supergroup", title: "Games" } },
+      data,
+    },
+  };
+}
+
 export function makeCtx(tg: FakeTelegram, now: string, overrides: Partial<Ctx> = {}): Ctx {
   return { db: env.DB, tg, now: new Date(now), timeZone: "Europe/Helsinki", closeTime: "00:00", ...overrides };
 }

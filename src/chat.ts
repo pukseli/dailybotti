@@ -2,7 +2,7 @@
 
 import { setSetting, type Settings } from "./db";
 import type { Ai } from "./regressio";
-import { TelegramError, type ChatMember, type Message, type Telegram } from "./telegram";
+import { TelegramError, type ChatMember, type InlineKeyboardMarkup, type Message, type Telegram } from "./telegram";
 import { isClosed, localParts } from "./time";
 
 export interface Ctx {
@@ -30,6 +30,7 @@ export function dayIsClosed(ctx: Ctx, day: string): boolean {
 export interface SendOptions {
   silent?: boolean;
   replyTo?: Message;
+  replyMarkup?: InlineKeyboardMarkup;
 }
 
 export async function send(ctx: Ctx, chatId: number, text: string, opts: SendOptions & { threadId?: number | null } = {}): Promise<Message> {
@@ -42,6 +43,7 @@ export async function send(ctx: Ctx, chatId: number, text: string, opts: SendOpt
   if (opts.silent) params.disable_notification = true;
   if (opts.threadId) params.message_thread_id = opts.threadId;
   if (opts.replyTo) params.reply_parameters = { message_id: opts.replyTo.message_id, allow_sending_without_reply: true };
+  if (opts.replyMarkup) params.reply_markup = opts.replyMarkup;
   return ctx.tg.call<Message>("sendMessage", params);
 }
 

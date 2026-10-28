@@ -7,6 +7,7 @@ import {
   getDay,
   getResult,
   getSettings,
+  getVoteState,
   insertResult,
   markFinalized,
   openDays,
@@ -15,14 +16,17 @@ import {
   saveBoard,
   setDisplayName,
   setSetting,
+  setVoteState,
   statsForEveryone,
   statsForPlayer,
   upsertPlayer,
   type PlacementRow,
   type ResultRow,
   type Settings,
+  type VoteMode,
+  type VoteState,
 } from "./db";
-import { dayIsClosed, EXPECTED_PLAYERS, isGroupMember, reply, sendToGroup, today, tryCall, type Ctx } from "./chat";
+import { dayIsClosed, EXPECTED_PLAYERS, isGroupMember, reply, send, sendToGroup, today, tryCall, type Ctx } from "./chat";
 
 export { EXPECTED_PLAYERS };
 import { syncCommandMenus } from "./commands";
@@ -57,15 +61,26 @@ import {
   renderPlayerStats,
   renderRegressio,
   renderSummary,
+  renderVoteKeyboard,
+  renderVoteMessage,
 } from "./render";
 import { dayStandings, overallValue, type DayResult } from "./scoring";
-import { isMessageGone, isNotModified, type ChatMember, type Message, type Update, type User } from "./telegram";
+import {
+  isMessageGone,
+  isNotModified,
+  type CallbackQuery,
+  type ChatMember,
+  type Message,
+  type Update,
+  type User,
+} from "./telegram";
 import { addDays, dayLabel } from "./time";
 
 export type { Ctx } from "./chat";
 
 const BOARD_CLAIM_MS = 60_000;
 
+export const VOTE_THRESHOLD = 4;
 
 /**
  * Checks whether all expected players have completed all games for the given day.
@@ -106,8 +121,12 @@ export function parseCommand(text: string, botUsername: string | null): ParsedCo
 
 export async function handleUpdate(ctx: Ctx, update: Update): Promise<void> {
   if (update.callback_query) {
-    // A tap on an imitation ballot. If it was the last vote, the day may now be complete.
     const settings = await getSettings(ctx.db);
+    if (update.callback_query.data?.startsWith("vote:")) {
+      await handleCallbackQuery(ctx, update.callback_query, settings);
+      return;
+    }
+    // A tap on an imitation ballot. If it was the last vote, the day may now be complete.
     const votedDay = await handleVoteTap(ctx, settings, update.callback_query);
     if (votedDay) await finishOrRefresh(ctx, settings, votedDay);
     return;
@@ -145,6 +164,11 @@ export async function handleUpdate(ctx: Ctx, update: Update): Promise<void> {
   if (isRecording(msg)) {
     const day = await handleRecording(ctx, settings, msg, msg.from);
     if (day) await finishOrRefresh(ctx, settings, day);
+    return;
+  }
+  const voteMode = await detectVoteCommand(ctx, msg, text, settings);
+  if (voteMode) {
+    await startVote(ctx, msg, voteMode, settings);
     return;
   }
   return groupResults(ctx, msg, msg.from, text, settings);
@@ -391,7 +415,180 @@ async function groupCommand(ctx: Ctx, msg: Message, name: string, settings: Sett
     case "aanesta":
       if (msg.from && !msg.sender_chat) await ballotCommand(ctx, msg, msg.from, settings);
       return;
+    case "vote_leaderboard":
+      if (msg.from && !msg.sender_chat) {
+        const mode: VoteMode = /\bfinalize\b/i.test(msg.text ?? msg.caption ?? "") ? "finalize" : "interim";
+        await startVote(ctx, msg, mode, settings);
+      }
+      return;
+    case "finalize":
+      if (msg.from && !msg.sender_chat) {
+        await startVote(ctx, msg, "finalize", settings);
+      }
+      return;
   }
+}
+
+async function detectVoteCommand(ctx: Ctx, msg: Message, text: string, settings: Settings): Promise<VoteMode | null> {
+  const m = /^(?:!vote[-_]leaderboard|\/vote-leaderboard)(?:@([A-Za-z0-9_]+))?(?:\s+(.*))?$/i.exec(text.trim());
+  if (m) {
+    if (m[1] && settings.botUsername && m[1].toLowerCase() !== settings.botUsername.toLowerCase()) return null;
+    const arg = m[2] ?? "";
+    return /\bfinalize\b/i.test(arg) ? "finalize" : "interim";
+  }
+
+  const replyMsg = msg.reply_to_message;
+  if (replyMsg && /^!?(?:finalize|sulje|lopullinen)(?:\s|$)/i.test(text.trim())) {
+    const voteState = await getVoteState(ctx.db);
+    const isTrackedMessage =
+      voteState?.interimMessageIds?.includes(replyMsg.message_id) ||
+      voteState?.messageId === replyMsg.message_id;
+    const isBotInterimMessage =
+      (settings.botId !== null && replyMsg.from?.id === settings.botId) ||
+      (replyMsg.text ?? "").includes("Väliaikatilanne");
+    if (isTrackedMessage || isBotInterimMessage) {
+      return "finalize";
+    }
+  }
+  return null;
+}
+
+async function startVote(ctx: Ctx, msg: Message, mode: VoteMode, settings: Settings): Promise<void> {
+  const day = today(ctx);
+  const row = await getDay(ctx.db, day);
+  if (dayIsClosed(ctx, day) || row?.finalized_at) {
+    await reply(ctx, msg, "Today's results are closed. The next board opens at midnight.");
+    return;
+  }
+
+  const results = await resultsForDay(ctx.db, day);
+  if (results.length === 0) {
+    await reply(ctx, msg, "Kukaan ei ole vielä pelannut tänään.");
+    return;
+  }
+
+  const prev = await getVoteState(ctx.db);
+  const interimMessageIds = prev?.day === day ? (prev.interimMessageIds ?? []) : [];
+
+  const state: VoteState = {
+    day,
+    mode,
+    messageId: 0,
+    yes: {},
+    no: {},
+    completed: false,
+    interimMessageIds,
+  };
+
+  const threadId = msg.is_topic_message ? msg.message_thread_id : settings.groupThreadId;
+  const sent = await send(ctx, msg.chat.id, renderVoteMessage(state, VOTE_THRESHOLD), {
+    replyTo: msg,
+    threadId,
+    replyMarkup: renderVoteKeyboard(state, VOTE_THRESHOLD),
+  });
+  state.messageId = sent.message_id;
+  await setVoteState(ctx.db, state);
+}
+
+async function postInterimSummary(ctx: Ctx, settings: Settings, day: string): Promise<Message | null> {
+  const results = await resultsForDay(ctx.db, day);
+  if (results.length === 0) return null;
+  const standings = dayStandings(
+    results.map((r) => ({ playerId: r.player_id, game: r.game, score: r.score, maxScore: r.max_score })),
+  );
+  const players = await allPlayers(ctx.db);
+  const names = displayNames(players);
+  return sendToGroup(ctx, settings, renderSummary({ day, standings, results, names, interim: true }));
+}
+
+async function handleCallbackQuery(ctx: Ctx, query: CallbackQuery, settings: Settings): Promise<void> {
+  const m = /^vote:(?:(interim|finalize):)?(yes|no)$/.exec(query.data ?? "");
+  if (!m) {
+    await tryCall(ctx, "answerCallbackQuery", { callback_query_id: query.id });
+    return;
+  }
+  const choice = m[2] as "yes" | "no";
+
+  if (settings.groupChatId === null || (query.message && query.message.chat.id !== settings.groupChatId)) {
+    await tryCall(ctx, "answerCallbackQuery", { callback_query_id: query.id });
+    return;
+  }
+
+  const day = today(ctx);
+  const [state, dayRow] = await Promise.all([getVoteState(ctx.db), getDay(ctx.db, day)]);
+
+  if (!state || state.day !== day || dayIsClosed(ctx, day) || dayRow?.finalized_at) {
+    await tryCall(ctx, "answerCallbackQuery", { callback_query_id: query.id, text: "Tämä äänestys ei ole enää voimassa." });
+    return;
+  }
+  if (state.completed) {
+    await tryCall(ctx, "answerCallbackQuery", { callback_query_id: query.id, text: "Äänestys on jo päättynyt." });
+    return;
+  }
+  if (query.message && query.message.message_id !== state.messageId) {
+    await tryCall(ctx, "answerCallbackQuery", { callback_query_id: query.id, text: "Uudempi äänestys on käynnissä." });
+    return;
+  }
+
+  const voterName = await playerName(ctx, query.from);
+  const userKey = String(query.from.id);
+
+  if (choice === "yes") {
+    if (state.yes[userKey]) {
+      await tryCall(ctx, "answerCallbackQuery", { callback_query_id: query.id, text: "Olet jo äänestänyt Joo." });
+      return;
+    }
+    delete state.no[userKey];
+    state.yes[userKey] = voterName;
+  } else {
+    if (state.no[userKey]) {
+      await tryCall(ctx, "answerCallbackQuery", { callback_query_id: query.id, text: "Olet jo äänestänyt Ei." });
+      return;
+    }
+    delete state.yes[userKey];
+    state.no[userKey] = voterName;
+  }
+
+  if (Object.keys(state.yes).length >= VOTE_THRESHOLD) {
+    state.completed = true;
+    await tryCall(ctx, "answerCallbackQuery", {
+      callback_query_id: query.id,
+      text: "4 Joo-ääntä täynnä! Julkaistaan tulokset.",
+    });
+    await tryCall(ctx, "editMessageText", {
+      chat_id: settings.groupChatId,
+      message_id: state.messageId,
+      text: renderVoteMessage(state, VOTE_THRESHOLD),
+      parse_mode: "HTML",
+      link_preview_options: { is_disabled: true },
+    });
+
+    if (state.mode === "finalize") {
+      await setVoteState(ctx.db, state);
+      await finalizeDay(ctx, settings, day);
+    } else {
+      const sentSummary = await postInterimSummary(ctx, settings, day);
+      if (sentSummary) {
+        state.interimMessageIds = [...(state.interimMessageIds ?? []), sentSummary.message_id];
+      }
+      await setVoteState(ctx.db, state);
+    }
+    return;
+  }
+
+  await setVoteState(ctx.db, state);
+  await tryCall(ctx, "answerCallbackQuery", {
+    callback_query_id: query.id,
+    text: choice === "yes" ? "Äänestit: Joo 👍" : "Äänestit: Ei 👎",
+  });
+  await tryCall(ctx, "editMessageText", {
+    chat_id: settings.groupChatId,
+    message_id: state.messageId,
+    text: renderVoteMessage(state, VOTE_THRESHOLD),
+    parse_mode: "HTML",
+    link_preview_options: { is_disabled: true },
+    reply_markup: renderVoteKeyboard(state, VOTE_THRESHOLD),
+  });
 }
 
 async function setup(ctx: Ctx, msg: Message, settings: Settings): Promise<void> {

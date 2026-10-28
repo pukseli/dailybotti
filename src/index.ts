@@ -59,10 +59,11 @@ async function init(request: Request, env: Env): Promise<Response> {
     await tg.call("setWebhook", {
       url: webhookUrl,
       secret_token: env.WEBHOOK_SECRET,
-      // callback_query: taps on the imitation ballot buttons.
+      // callback_query: taps on the imitation ballot and !vote-leaderboard buttons.
       allowed_updates: ["message", "callback_query"],
       max_connections: 1,
     });
+    await setSetting(env.DB, "webhook_v2", "1");
     report.push(`✅ Webhook set to ${webhookUrl}`);
 
     await syncCommandMenus(env.DB, tg, null, true);
@@ -90,6 +91,21 @@ export default {
         return new Response("bad request", { status: 400 });
       }
       const ctx = context(env);
+      try {
+        const w = await env.DB.prepare("SELECT value FROM settings WHERE key = 'webhook_v2'").first<{ value: string }>();
+        if (!w) {
+          const webhookUrl = `${url.origin}/telegram`;
+          await ctx.tg.call("setWebhook", {
+            url: webhookUrl,
+            secret_token: env.WEBHOOK_SECRET,
+            allowed_updates: ["message", "callback_query"],
+            max_connections: 1,
+          });
+          await setSetting(env.DB, "webhook_v2", "1");
+        }
+      } catch (err) {
+        console.warn("webhook auto-upgrade failed", err);
+      }
       try {
         await handleUpdate(ctx, update);
       } catch (err) {

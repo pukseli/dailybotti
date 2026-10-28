@@ -11,6 +11,7 @@ import {
   anna,
   ben,
   chris,
+  clickButton,
   dan,
   dm,
   eralyShare,
@@ -759,5 +760,115 @@ describe("command menus", () => {
     await tick(makeCtx(tg, SAT_0001));
     expect(tg.of("setMyCommands")).toHaveLength(2);
     expect((await menus())?.value).toBe(COMMAND_MENUS);
+  });
+});
+
+describe("!vote-leaderboard", () => {
+  it("tells the group if nobody has played yet", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "!vote-leaderboard"));
+    expect(tg.lastTextTo(GROUP)).toContain("Kukaan ei ole vielä pelannut tänään.");
+  });
+
+  it("runs an interim vote with Joo/Ei buttons, lets voters switch votes, and posts interim standings at 4 Joo votes without closing the day", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, eralyShare(8, 640)));
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, eralyShare(8, 550)));
+    tg.clear();
+
+    // Anna starts the vote
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "!vote-leaderboard"));
+    const sentVote = tg.sentTo(GROUP)[0]!;
+    expect(sentVote.params.text).toContain("Äänestys: Julkaistaanko päivän väliaikatilanne?");
+    expect(sentVote.params.reply_markup).toEqual({
+      inline_keyboard: [
+        [
+          { text: "👍 Joo (0/4)", callback_data: "vote:interim:yes" },
+          { text: "👎 Ei (0)", callback_data: "vote:interim:no" },
+        ],
+      ],
+    });
+    const voteMsgId = tg.nextMessageId - 1;
+
+    // Anna, Ben, Chris vote Joo; Dan votes Ei first
+    await handleUpdate(makeCtx(tg, FRI_NOON), clickButton(anna, "vote:interim:yes", voteMsgId));
+    await handleUpdate(makeCtx(tg, FRI_NOON), clickButton(ben, "vote:interim:yes", voteMsgId));
+    await handleUpdate(makeCtx(tg, FRI_NOON), clickButton(chris, "vote:interim:yes", voteMsgId));
+    await handleUpdate(makeCtx(tg, FRI_NOON), clickButton(dan, "vote:interim:no", voteMsgId));
+
+    const lastEdit = tg.of("editMessageText").at(-1)!;
+    expect(lastEdit.params.text).toContain("👍 <b>Joo (3/4):</b> Anna, Ben, Chris");
+    expect(lastEdit.params.text).toContain("👎 <b>Ei (1):</b> Dan");
+
+    // Dan changes mind from Ei to Joo -> 4/4 Joo reached!
+    tg.clear();
+    await handleUpdate(makeCtx(tg, FRI_NOON), clickButton(dan, "vote:interim:yes", voteMsgId));
+
+    // Vote message is updated to completed without buttons
+    const finalVoteEdit = tg.of("editMessageText").at(-1)!;
+    expect(finalVoteEdit.params.text).toContain("✅ <b>Äänestys hyväksytty (4/4) – julkaistaan väliaikatilanne!</b>");
+    expect(finalVoteEdit.params.reply_markup).toBeUndefined();
+
+    // Interim summary is posted in the group
+    const interimPost = tg.sentTo(GROUP)[0]!;
+    expect(interimPost.params.text).toContain("⏱️ <b>Väliaikatilanne · Fri 23 Oct</b>");
+    expect(interimPost.params.text).toContain("🥇 Anna · 640");
+    expect(interimPost.params.text).toContain("🥈 Ben · 550");
+    expect(interimPost.params.text).toContain('Vastaa tähän viestiin "finalize"');
+    const interimMsgId = tg.nextMessageId - 1;
+
+    // Day is STILL open: Chris can submit a game after the interim leaderboard!
+    const dayRow = await env.DB.prepare("SELECT finalized_at AS f FROM days WHERE day = '2026-10-23'").first<{ f: string | null }>();
+    expect(dayRow?.f).toBeNull();
+    await handleUpdate(makeCtx(tg, FRI_EVENING), dm(chris, eralyShare(8, 690)));
+    expect(tg.lastTextTo(chris.id)).toContain("✅ Eraly #8: 690/700 saved.");
+
+    // Now Ben replies "finalize" to the interim summary message -> launches finalize vote!
+    tg.clear();
+    const replyUpdate = inGroup(ben, "finalize");
+    replyUpdate.message!.reply_to_message = {
+      message_id: interimMsgId,
+      from: { id: 999, is_bot: true, first_name: "Podium" },
+      chat: { id: GROUP, type: "supergroup" },
+      text: interimPost.params.text as string,
+    };
+    await handleUpdate(makeCtx(tg, FRI_EVENING), replyUpdate);
+
+    const finalizeVote = tg.sentTo(GROUP)[0]!;
+    expect(finalizeVote.params.text).toContain("Äänestys: Suljetaanko päivän kisa ja julkaistaan lopulliset tulokset?");
+    const finalizeVoteMsgId = tg.nextMessageId - 1;
+
+    // All 4 vote Joo on the finalize vote
+    for (const u of [anna, ben, chris, dan]) {
+      await handleUpdate(makeCtx(tg, FRI_EVENING), clickButton(u, "vote:finalize:yes", finalizeVoteMsgId));
+    }
+
+    // Final results are posted with Chris's new score included, and the day is finalized!
+    const finalSummary = groupTexts().find((t) => t.startsWith("🏁"))!;
+    expect(finalSummary).toContain("🏁 <b>Results · Fri 23 Oct</b>");
+    expect(finalSummary).toContain("🥇 Chris · 690");
+    expect(finalSummary).toContain("🥈 Anna · 640");
+
+    const dayRowAfter = await env.DB.prepare("SELECT finalized_at AS f FROM days WHERE day = '2026-10-23'").first<{ f: string | null }>();
+    expect(dayRowAfter?.f).not.toBeNull();
+  });
+
+  it("supports direct '!vote-leaderboard finalize' command to close the day with 4 Joo votes", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, eralyShare(8, 640)));
+    tg.clear();
+
+    await handleUpdate(makeCtx(tg, FRI_EVENING), inGroup(anna, "!vote-leaderboard finalize"));
+    const sentVote = tg.sentTo(GROUP)[0]!;
+    expect(sentVote.params.text).toContain("Suljetaanko päivän kisa ja julkaistaan lopulliset tulokset?");
+    const voteMsgId = tg.nextMessageId - 1;
+
+    for (const u of [anna, ben, chris, dan]) {
+      await handleUpdate(makeCtx(tg, FRI_EVENING), clickButton(u, "vote:finalize:yes", voteMsgId));
+    }
+
+    expect(groupTexts().some((t) => t.startsWith("🏁 <b>Results · Fri 23 Oct</b>"))).toBe(true);
+    const dayRow = await env.DB.prepare("SELECT finalized_at AS f FROM days WHERE day = '2026-10-23'").first<{ f: string | null }>();
+    expect(dayRow?.f).not.toBeNull();
   });
 });

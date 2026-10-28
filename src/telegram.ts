@@ -46,6 +46,10 @@ export interface InlineKeyboardButton {
   callback_data: string;
 }
 
+export interface InlineKeyboardMarkup {
+  inline_keyboard: InlineKeyboardButton[][];
+}
+
 export interface Update {
   update_id: number;
   message?: Message;

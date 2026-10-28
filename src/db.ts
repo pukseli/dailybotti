@@ -35,6 +35,32 @@ export async function setSetting(db: D1Database, key: string, value: string | nu
   }
 }
 
+export type VoteMode = "interim" | "finalize";
+
+export interface VoteState {
+  day: string;
+  mode: VoteMode;
+  messageId: number;
+  yes: Record<string, string>;
+  no: Record<string, string>;
+  completed?: boolean;
+  interimMessageIds?: number[];
+}
+
+export async function getVoteState(db: D1Database): Promise<VoteState | null> {
+  const row = await db.prepare("SELECT value FROM settings WHERE key = 'vote_state'").first<{ value: string }>();
+  if (!row?.value) return null;
+  try {
+    return JSON.parse(row.value) as VoteState;
+  } catch {
+    return null;
+  }
+}
+
+export async function setVoteState(db: D1Database, state: VoteState | null): Promise<void> {
+  await setSetting(db, "vote_state", state ? JSON.stringify(state) : null);
+}
+
 export interface PlayerRow {
   id: number;
   first_name: string;
