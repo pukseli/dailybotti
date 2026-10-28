@@ -5,7 +5,7 @@
 // that player could have got.
 
 import { dayIsClosed, EXPECTED_PLAYERS, isGroupMember, reply, sendToGroup, today, tryCall, type Ctx } from "./chat";
-import { allPlayers, ensureDay, upsertPlayer, type Settings } from "./db";
+import { allPlayers, ensureDay, getDay, upsertPlayer, type Settings } from "./db";
 import { displayNames, escapeHtml, fit } from "./render";
 import { placeMark, rank } from "./scoring";
 import { isNotModified, type CallbackQuery, type InlineKeyboardButton, type Message, type User } from "./telegram";
@@ -365,6 +365,14 @@ function renderResults(imitation: DayImitation, names: Map<number, string>): str
 
 // ---------- the day's flow (run every minute) ----------
 
+/** Closes an open imitation contest when the day is finalized early: counts votes if voting had started, or cancels it. */
+export async function finishImitationForDay(ctx: Ctx, settings: Settings, day: string): Promise<void> {
+  const row = await getImitationDay(ctx.db, day);
+  if (!row || row.closed_at) return;
+  if (row.vote_opened_at) await closeVote(ctx, settings, day, false);
+  else await closeChallenge(ctx.db, day, ctx.now.toISOString(), true);
+}
+
 /** Draws and announces the day's character, opens the vote at the deadline, and ends votes when their day closes. */
 export async function imitationTick(ctx: Ctx, settings: Settings): Promise<void> {
   // Days that have ended: count the votes, or call the contest off if the vote never started.
@@ -376,6 +384,7 @@ export async function imitationTick(ctx: Ctx, settings: Settings): Promise<void>
 
   const { date: day, time } = localParts(ctx.now, ctx.timeZone);
   if (dayIsClosed(ctx, day) || time < CHALLENGE_TIME) return;
+  if ((await getDay(ctx.db, day))?.finalized_at) return;
   if (time < VOTE_DEADLINE) {
     await drawAndAnnounce(ctx, settings, day);
     return;

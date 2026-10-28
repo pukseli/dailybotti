@@ -33,6 +33,7 @@ import { syncCommandMenus } from "./commands";
 import {
   ballotCommand,
   challengeCommand,
+  finishImitationForDay,
   handleRecording,
   handleVoteTap,
   imitationForBoard,
@@ -491,14 +492,16 @@ async function startVote(ctx: Ctx, msg: Message, mode: VoteMode, settings: Setti
 }
 
 async function postInterimSummary(ctx: Ctx, settings: Settings, day: string): Promise<Message | null> {
-  const results = await resultsForDay(ctx.db, day);
-  if (results.length === 0) return null;
-  const standings = dayStandings(
-    results.map((r) => ({ playerId: r.player_id, game: r.game, score: r.score, maxScore: r.max_score })),
-  );
+  const [results, imitation] = await Promise.all([resultsForDay(ctx.db, day), imitationForDay(ctx.db, day)]);
+  if (results.length === 0 && !imitation) return null;
+  const dayResults: DayResult[] = [
+    ...results.map((r) => ({ playerId: r.player_id, game: r.game, score: r.score, maxScore: r.max_score })),
+    ...[...(imitation?.scores ?? [])].map(([playerId, s]) => ({ playerId, game: "imitation" as const, score: s.points, maxScore: s.max })),
+  ];
+  const standings = dayStandings(dayResults);
   const players = await allPlayers(ctx.db);
   const names = displayNames(players);
-  return sendToGroup(ctx, settings, renderSummary({ day, standings, results, names, interim: true }));
+  return sendToGroup(ctx, settings, renderSummary({ day, standings, results, names, imitation, interim: true }));
 }
 
 async function handleCallbackQuery(ctx: Ctx, query: CallbackQuery, settings: Settings): Promise<void> {
@@ -908,6 +911,7 @@ export async function finalizeDay(ctx: Ctx, settings: Settings, day: string): Pr
   const dayRow = await getDay(ctx.db, day);
   if (dayRow?.finalized_at) return;
 
+  await finishImitationForDay(ctx, settings, day);
   const [results, imitation] = await Promise.all([resultsForDay(ctx.db, day), imitationForDay(ctx.db, day)]);
   if (results.length === 0 && !imitation) {
     await markFinalized(ctx.db, day, ctx.now.toISOString());
