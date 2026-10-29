@@ -213,10 +213,16 @@ export interface PlacementRow {
   value: number;
 }
 
-export async function savePlacements(db: D1Database, day: string, rows: PlacementRow[]): Promise<void> {
+/**
+ * Replaces a day's placements in the given categories. The games podium and the imitation contest are saved at
+ * different times, so each only touches its own categories.
+ */
+export async function savePlacements(db: D1Database, day: string, rows: PlacementRow[], categories: readonly Category[]): Promise<void> {
   const insert = db.prepare("INSERT INTO placements (day, category, player_id, rank, value) VALUES (?, ?, ?, ?, ?)");
   await db.batch([
-    db.prepare("DELETE FROM placements WHERE day = ?").bind(day),
+    db
+      .prepare(`DELETE FROM placements WHERE day = ? AND category IN (${categories.map(() => "?").join(", ")})`)
+      .bind(day, ...categories),
     ...rows.map((r) => insert.bind(day, r.category, r.playerId, r.rank, r.value)),
   ]);
 }

@@ -34,12 +34,8 @@ import { syncCommandMenus } from "./commands";
 import {
   ballotCommand,
   challengeCommand,
-  finishImitationForDay,
   handleRecording,
   handleVoteTap,
-  imitationForBoard,
-  imitationForDay,
-  imitationPending,
   imitationTick,
   isRecording,
   suggestCommand,
@@ -102,14 +98,7 @@ export async function isDayComplete(ctx: Ctx, day: string, minPlayers = EXPECTED
     const hasAll = GAMES.every((g) => playerResults.some((r) => r.game === g.id));
     if (!hasAll) return false;
   }
-  // The imitation contest is part of the day's score, so wait for its vote too.
-  return !(await imitationPending(ctx, day));
-}
-
-/** After something changed a day: post the podium if the day is complete, otherwise update the board. */
-async function finishOrRefresh(ctx: Ctx, settings: Settings, day: string): Promise<void> {
-  if (!dayIsClosed(ctx, day) && (await isDayComplete(ctx, day))) await finalizeDay(ctx, settings, day);
-  else await refreshBoardSafely(ctx, settings, [day]);
+  return true;
 }
 
 // ---------- updates ----------
@@ -137,9 +126,7 @@ export async function handleUpdate(ctx: Ctx, update: Update): Promise<void> {
       await handleCallbackQuery(ctx, update.callback_query, settings);
       return;
     }
-    // A tap on an imitation ballot. If it was the last vote, the day may now be complete.
-    const votedDay = await handleVoteTap(ctx, settings, update.callback_query);
-    if (votedDay) await finishOrRefresh(ctx, settings, votedDay);
+    await handleVoteTap(ctx, settings, update.callback_query);
     return;
   }
   const msg = update.message;
@@ -183,8 +170,7 @@ export async function handleUpdate(ctx: Ctx, update: Update): Promise<void> {
   if (command.kind === "command") return groupCommand(ctx, msg, command.name, settings);
   if (!msg.from || msg.from.is_bot || msg.sender_chat) return;
   if (isRecording(msg)) {
-    const day = await handleRecording(ctx, settings, msg, msg.from);
-    if (day) await finishOrRefresh(ctx, settings, day);
+    await handleRecording(ctx, settings, msg, msg.from);
     return;
   }
   const voteMode = await detectVoteCommand(ctx, msg, text, settings);
@@ -629,16 +615,18 @@ async function startVote(ctx: Ctx, msg: Message, mode: VoteMode, settings: Setti
 }
 
 async function postInterimSummary(ctx: Ctx, settings: Settings, day: string): Promise<Message | null> {
-  const [results, imitation] = await Promise.all([resultsForDay(ctx.db, day), imitationForDay(ctx.db, day)]);
-  if (results.length === 0 && !imitation) return null;
-  const dayResults: DayResult[] = [
-    ...results.map((r) => ({ playerId: r.player_id, game: r.game, score: r.score, maxScore: r.max_score })),
-    ...[...(imitation?.scores ?? [])].map(([playerId, s]) => ({ playerId, game: "imitation" as const, score: s.points, maxScore: s.max })),
-  ];
+  const results = await resultsForDay(ctx.db, day);
+  if (results.length === 0) return null;
+  const dayResults: DayResult[] = results.map((r) => ({
+    playerId: r.player_id,
+    game: r.game,
+    score: r.score,
+    maxScore: r.max_score,
+  }));
   const standings = dayStandings(dayResults);
   const players = await allPlayers(ctx.db);
   const names = displayNames(players);
-  return sendToGroup(ctx, settings, renderSummary({ day, standings, results, names, imitation, interim: true }));
+  return sendToGroup(ctx, settings, renderSummary({ day, standings, results, names, interim: true }));
 }
 
 async function handleCallbackQuery(ctx: Ctx, query: CallbackQuery, settings: Settings): Promise<void> {
@@ -973,10 +961,9 @@ async function recordResults(ctx: Ctx, user: User, results: ParsedResult[], rawI
 // ---------- board ----------
 
 async function boardText(ctx: Ctx, settings: Settings, day: string, closed: boolean): Promise<string> {
-  const [results, players, imitation] = await Promise.all([
+  const [results, players] = await Promise.all([
     resultsForDay(ctx.db, day),
     allPlayers(ctx.db),
-    imitationForBoard(ctx.db, day),
   ]);
   return renderBoard({
     day,
@@ -985,7 +972,6 @@ async function boardText(ctx: Ctx, settings: Settings, day: string, closed: bool
     closed,
     closeTime: ctx.closeTime,
     botUsername: settings.botUsername,
-    imitation,
   });
 }
 
@@ -1048,24 +1034,24 @@ export async function finalizeDay(ctx: Ctx, settings: Settings, day: string): Pr
   const dayRow = await getDay(ctx.db, day);
   if (dayRow?.finalized_at) return;
 
-  await finishImitationForDay(ctx, settings, day);
-  const [results, imitation] = await Promise.all([resultsForDay(ctx.db, day), imitationForDay(ctx.db, day)]);
-  if (results.length === 0 && !imitation) {
+  const results = await resultsForDay(ctx.db, day);
+  if (results.length === 0) {
     await markFinalized(ctx.db, day, ctx.now.toISOString());
     return;
   }
-  // The imitation contest counts as a fourth event: points received out of the most possible.
-  const dayResults: DayResult[] = [
-    ...results.map((r) => ({ playerId: r.player_id, game: r.game, score: r.score, maxScore: r.max_score })),
-    ...[...(imitation?.scores ?? [])].map(([playerId, s]) => ({ playerId, game: "imitation" as const, score: s.points, maxScore: s.max })),
-  ];
-  const maxTotal = (GAMES.length + (imitation ? 1 : 0)) * 100;
+  const dayResults: DayResult[] = results.map((r) => ({
+    playerId: r.player_id,
+    game: r.game,
+    score: r.score,
+    maxScore: r.max_score,
+  }));
+  const maxTotal = GAMES.length * 100;
   const standings = dayStandings(dayResults);
   const placements: PlacementRow[] = [];
   for (const [category, rows] of standings) {
     for (const s of rows) placements.push({ category, playerId: s.playerId, rank: s.rank, value: s.value });
   }
-  await savePlacements(ctx.db, day, placements);
+  await savePlacements(ctx.db, day, placements, [...GAMES.map((g) => g.id), "overall"]);
 
   const players = await allPlayers(ctx.db);
   const names = displayNames(players);
@@ -1098,7 +1084,7 @@ Regressoidut pisteet: ${regressedScore.toFixed(1)} / ${maxTotal}`;
     };
   }
 
-  await sendToGroup(ctx, settings, renderSummary({ day, standings, results, names, blowoutReport, imitation }));
+  await sendToGroup(ctx, settings, renderSummary({ day, standings, results, names, blowoutReport }));
   await markFinalized(ctx.db, day, ctx.now.toISOString());
   await refreshBoardSafely(ctx, settings, [day]); // flip the board to "closed"
 }
@@ -1116,8 +1102,6 @@ export async function tick(ctx: Ctx): Promise<void> {
 
   if (settings.groupChatId === null) return;
 
-  // The imitation contest first: draw the character, open the vote, and end votes whose day has closed,
-  // so a podium posted below already includes the imitation.
   try {
     await imitationTick(ctx, settings);
   } catch (err) {
@@ -1126,7 +1110,7 @@ export async function tick(ctx: Ctx): Promise<void> {
 
   try {
     for (const day of await openDays(ctx.db)) {
-      if (dayIsClosed(ctx, day) ? !(await imitationPending(ctx, day)) : await isDayComplete(ctx, day)) {
+      if (dayIsClosed(ctx, day) || (await isDayComplete(ctx, day))) {
         await finalizeDay(ctx, settings, day);
       }
     }

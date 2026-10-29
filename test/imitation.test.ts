@@ -45,7 +45,7 @@ beforeEach(async () => {
   await resetDb();
   tg = new FakeTelegram();
   await env.DB.prepare(
-    "INSERT INTO settings (key, value) VALUES ('bot_username', ?), ('bot_id', '999'), ('command_menus', ?), ('group_chat_id', ?)",
+    "INSERT INTO settings (key, value) VALUES ('bot_username', ?), ('bot_id', '999'), ('command_menus', ?), ('group_chat_id', ?), ('imitation_week:2026-10-19', '2026-10-23')",
   )
     .bind(BOT_USERNAME, COMMAND_MENUS, String(GROUP))
     .run();
@@ -125,31 +125,52 @@ describe("suggestions", () => {
   });
 });
 
-describe("the daily draw", () => {
-  it("announces the character at 09:00, once", async () => {
+describe("the weekly draw", () => {
+  it("announces the character at 09:00 on the chosen day of the week, once", async () => {
     await register();
     await suggest("Mikki Hiiri");
     await tick(makeCtx(tg, T0830));
-    expect(groupTexts().some((t) => t.includes("Päivän imitaatio"))).toBe(false);
+    expect(groupTexts().some((t) => t.includes("Viikon imitaatio"))).toBe(false);
 
     await handleUpdate(makeCtx(tg, T0830), inGroup(ben, "/haaste"));
-    expect(tg.lastTextTo(GROUP)).toBe("🎭 Päivän imitaatiohaaste arvotaan klo 09:00.");
+    expect(tg.lastTextTo(GROUP)).toBe("🎭 Tänään ei ole imitaatiohaastetta. Viikon haaste julkistetaan satunnaisena päivänä klo 09:00.");
 
     await tick(makeCtx(tg, T0900));
     await tick(makeCtx(tg, T1200));
-    const announcements = groupTexts().filter((t) => t.startsWith("🎭 <b>Päivän imitaatio: Mikki Hiiri</b>"));
+    const announcements = groupTexts().filter((t) => t.startsWith("🎭 <b>Viikon imitaatio: Mikki Hiiri</b>"));
     expect(announcements).toHaveLength(1);
     expect(announcements[0]).toContain("ääniviestinä tähän ryhmään klo 21:00 mennessä");
     expect(announcements[0]).toContain("@PodiumTestBot");
+
+    // Other days of the same week do not draw another challenge
+    await suggest("Aku Ankka");
+    await tick(makeCtx(tg, SAT0900));
+    await tick(makeCtx(tg, SUN0900));
+    expect(groupTexts().filter((t) => t.startsWith("🎭 <b>Viikon imitaatio:"))).toHaveLength(1);
+
+    await handleUpdate(makeCtx(tg, SAT0900), inGroup(ben, "/haaste"));
+    expect(tg.lastTextTo(GROUP)).toBe("🎭 Tämän viikon imitaatiohaaste (Mikki Hiiri) on jo pidetty (23.10.). Seuraava haaste arvotaan ensi viikolla.");
   });
 
-  it("never draws the same character twice, and says once when they run out", async () => {
+  it("picks one random day in the week (Mon–Sun) when no day is stored yet", async () => {
+    await env.DB.prepare("DELETE FROM settings WHERE key = 'imitation_week:2026-10-19'").run();
+    await suggest("Mikki Hiiri");
+    // Tick on Monday 19 Oct 09:00
+    await tick(makeCtx(tg, "2026-10-19T06:00:30Z"));
+    const saved = await env.DB.prepare("SELECT value FROM settings WHERE key = 'imitation_week:2026-10-19'").first<{ value: string }>();
+    expect(saved?.value).toMatch(/^2026-10-(19|20|21|22|23|24|25)$/);
+  });
+
+  it("never draws the same character twice across weeks, and says once when they run out", async () => {
     await register();
     await suggest("Mikki Hiiri", "Aku Ankka");
-    for (const t of [T0900, SAT0900, SUN0900, MON0900]) await tick(makeCtx(tg, t));
+    await env.DB.prepare(
+      "INSERT INTO settings (key, value) VALUES ('imitation_week:2026-10-26', '2026-10-26'), ('imitation_week:2026-11-02', '2026-11-02'), ('imitation_week:2026-11-09', '2026-11-09')",
+    ).run();
+    for (const t of [T0900, MON0900, "2026-11-02T07:00:30Z", "2026-11-09T07:00:30Z"]) await tick(makeCtx(tg, t));
     const drawn = groupTexts()
-      .filter((t) => t.startsWith("🎭 <b>Päivän imitaatio:"))
-      .map((t) => /Päivän imitaatio: (.+?)<\/b>/.exec(t)![1]);
+      .filter((t) => t.startsWith("🎭 <b>Viikon imitaatio:"))
+      .map((t) => /Viikon imitaatio: (.+?)<\/b>/.exec(t)![1]);
     expect(drawn.sort()).toEqual(["Aku Ankka", "Mikki Hiiri"]);
     expect(groupTexts().filter((t) => t.includes("ehdotukset ovat loppuneet"))).toHaveLength(1);
   });
@@ -163,7 +184,7 @@ describe("the daily draw", () => {
 });
 
 describe("a full contest", () => {
-  it("collects recordings, sends private ballots, counts 3 + 1 points and adds them to the podium", async () => {
+  it("collects recordings, sends private ballots, counts 3 + 1 points and posts standalone results", async () => {
     await register();
     await suggest("Mikki Hiiri");
     await tick(makeCtx(tg, T0900));
@@ -171,10 +192,6 @@ describe("a full contest", () => {
     for (const p of [anna, ben, chris]) await handleUpdate(makeCtx(tg, T1200), voiceInGroup(p));
     expect(tg.of("setMessageReaction").filter((c) => c.params.reaction[0].emoji === "👏")).toHaveLength(3);
     expect(tg.sentTo(anna.id).filter((c) => c.params.reply_markup)).toHaveLength(0); // no ballots yet
-    const board = tg.of("editMessageText").at(-1)!.params.text as string;
-    expect(board).toContain("Eraly #8 · Krillion #100 · Size It Up · 🎭 Mikki Hiiri");
-    expect(board).toContain("✅⬜⬜✅ Anna");
-    expect(board).toContain("✅⬜⬜⬜ Dan");
 
     await handleUpdate(makeCtx(tg, T1200), inGroup(dan, "/haaste"));
     expect(tg.lastTextTo(GROUP)).toContain("Äänitteet (3/4): ✅ Anna · ✅ Ben · ✅ Chris · ⏳ Dan");
@@ -210,16 +227,15 @@ describe("a full contest", () => {
 
     // Ben 3+3+3 = 9/9, Anna 3+1+1 = 5/9, Chris 1+1 = 2/9, Dan 0/9.
     expect(groupTexts().find((t) => t.includes("tulokset"))).toBe(
-      "🎭 <b>Imitaatio: Mikki Hiiri – tulokset</b>\n🥇 Ben · 9/9 p\n🥈 Anna · 5/9 p\n🥉 Chris · 2/9 p\n4. Dan · 0/9 p\n\nPisteet lasketaan mukaan päivän kokonaispisteisiin.",
+      "🎭 <b>Imitaatio: Mikki Hiiri – tulokset</b>\n🥇 Ben · 9/9 p\n🥈 Anna · 5/9 p\n🥉 Chris · 2/9 p\n4. Dan · 0/9 p",
     );
     expect(groupTexts().some((t) => t.startsWith("🏁"))).toBe(false); // the games aren't done yet
 
     await tick(makeCtx(tg, SAT0000));
     const podium = groupTexts().find((t) => t.startsWith("🏁"))!;
-    expect(podium).toContain("<b>🎭 Imitaatio: Mikki Hiiri</b>\n🥇 Ben · 9/9 p\n🥈 Anna · 5/9 p\n🥉 Chris · 2/9 p\n4. Dan · 0/9 p");
-    // Eraly % + imitation %: Ben 71.4 + 100, Anna 91.4 + 55.6, Chris 64.3 + 22.2, Dan 42.9 + 0.
+    expect(podium).not.toContain("Imitaatio");
     expect(podium).toContain(
-      "🏆 <b>Overall</b> (out of 400)\n🥇 Ben · 171.4 · 2/4 games\n🥈 Anna · 147.0 · 2/4 games\n🥉 Chris · 86.5 · 2/4 games\n4. Dan · 42.9 · 2/4 games",
+      "🏆 <b>Overall</b> (out of 300)\n🥇 Anna · 91.4 · 1/3 games\n🥈 Ben · 71.4 · 1/3 games\n🥉 Chris · 64.3 · 1/3 games\n4. Dan · 42.9 · 1/3 games",
     );
 
     await handleUpdate(makeCtx(tg, SAT0900), inGroup(anna, "/leaderboard"));
@@ -228,24 +244,26 @@ describe("a full contest", () => {
     expect(tg.lastTextTo(ben.id)).toContain("<b>🎭 Imitaatio</b>: 🥇1 🥈0 🥉0 · avg 100 % · best 100 % · 1 played");
   });
 
-  it("posts the podium as soon as the last vote is in when everyone has played everything", async () => {
+  it("posts the games podium immediately when everyone has played, without waiting for the imitation contest", async () => {
     await register();
     await suggest("Mikki Hiiri");
-    // Games all done before the draw: the podium waits, because a contest is still to come.
+    // Games all done before the draw: the podium is posted straight away!
     for (const p of PLAYERS) await handleUpdate(makeCtx(tg, T0830), dm(p, `${krillionShare(100, 300)}\n\n${sizeItUpShare(300)}`));
-    expect(groupTexts().some((t) => t.startsWith("🏁"))).toBe(false);
+    const podium = groupTexts().find((t) => t.startsWith("🏁"))!;
+    expect(podium).toBeDefined();
+    expect(podium).toContain("(out of 300)");
+    expect(podium).not.toContain("Imitaatio");
+
+    // At 09:00 the weekly imitation still draws and runs normally even though the games podium is already finalized.
     await tick(makeCtx(tg, T0900));
-    expect(groupTexts().some((t) => t.startsWith("🏁"))).toBe(false);
+    expect(groupTexts().some((t) => t.startsWith("🎭 <b>Viikon imitaatio: Mikki Hiiri</b>"))).toBe(true);
 
     for (const p of PLAYERS) await handleUpdate(makeCtx(tg, T1200), voiceInGroup(p));
     await vote(anna, ben, chris);
     await vote(ben, anna, chris);
     await vote(chris, ben, anna);
-    expect(groupTexts().some((t) => t.startsWith("🏁"))).toBe(false);
     await vote(dan, ben, anna);
-    const podium = groupTexts().find((t) => t.startsWith("🏁"))!;
-    expect(podium).toContain("(out of 400)");
-    expect(podium).toContain("🥇 Ben · 9/9 p");
+    expect(groupTexts().find((t) => t.includes("tulokset"))).toContain("🥇 Ben · 9/9 p");
   });
 });
 
@@ -270,11 +288,11 @@ describe("deadlines", () => {
     await vote(anna, ben, chris);
     await vote(dan, ben, null); // only a first choice by midnight
     await tick(makeCtx(tg, SAT0000));
-    expect(groupTexts().some((t) => t.includes("tulokset"))).toBe(false); // the podium carries them
     // Cast ballots: Anna's and Dan's. Ben 3+3 of 6, Chris 1 of 6, Anna 0 of 3 (only Dan's ballot could pick her).
-    expect(groupTexts().find((t) => t.startsWith("🏁"))).toContain(
-      "<b>🎭 Imitaatio: Mikki Hiiri</b>\n🥇 Ben · 6/6 p\n🥈 Chris · 1/6 p\n🥉 Anna · 0/3 p",
+    expect(groupTexts().find((t) => t.includes("tulokset"))).toBe(
+      "🎭 <b>Imitaatio: Mikki Hiiri – tulokset</b>\n🥇 Ben · 6/6 p\n🥈 Chris · 1/6 p\n🥉 Anna · 0/3 p",
     );
+    expect(groupTexts().find((t) => t.startsWith("🏁"))).not.toContain("Imitaatio");
   });
 
   it("calls the contest off with fewer than two recordings", async () => {
@@ -284,7 +302,7 @@ describe("deadlines", () => {
     await handleUpdate(makeCtx(tg, T1200), voiceInGroup(anna));
     await tick(makeCtx(tg, T2100));
     expect(groupTexts().at(-1)).toBe(
-      "🎭 Imitaatioon (Mikki Hiiri) tuli vain yksi suoritus, joten äänestystä ei järjestetä eikä imitaatio vaikuta tämän päivän pisteisiin.",
+      "🎭 Imitaatioon (Mikki Hiiri) tuli vain yksi suoritus, joten äänestystä ei järjestetä.",
     );
     expect(tg.of("sendMessage").filter((c) => c.params.reply_markup)).toHaveLength(0);
     await tick(makeCtx(tg, SAT0000));

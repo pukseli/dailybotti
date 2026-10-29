@@ -51,6 +51,14 @@ export function daysBetween(from: string, to: string): number {
   return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 864e5);
 }
 
+/** Monday ("YYYY-MM-DD") of the ISO week (Mon–Sun) containing `day`. */
+export function weekMonday(day: string): string {
+  const [y, m, d] = day.split("-").map(Number) as [number, number, number];
+  const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  const offset = dow === 0 ? -6 : 1 - dow;
+  return addDays(day, offset);
+}
+
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 

@@ -2,7 +2,6 @@
 
 import type { PlayerRow, ResultRow, StatsRow, VoteState } from "./db";
 import { ERALY_SYMBOL_POINTS, GAMES, KRILLION_SYMBOL_POINTS, gameById, gameTitle, parseRoundData, type GameId } from "./games";
-import type { DayImitation } from "./imitation";
 import type { BlowoutReport, RegressioReport } from "./regressio";
 import { MEDALS, placeMark, type Category, type Standing } from "./scoring";
 import type { InlineKeyboardMarkup } from "./telegram";
@@ -70,24 +69,18 @@ export function renderBoard(opts: {
   closed: boolean;
   closeTime: string;
   botUsername: string | null;
-  /** The day's imitation contest, shown as a fourth column. */
-  imitation?: { name: string; entrants: Set<number> } | null;
 }): string {
-  const { day, results, names, imitation } = opts;
+  const { day, results, names } = opts;
   const titles = GAMES.map((g) => gameTitle(g, day));
-  if (imitation) titles.push(`🎭 ${escapeHtml(imitation.name)}`);
   const lines = [
     opts.closed ? `🔒 <b>${dayLabel(day)}</b> · closed` : `📋 <b>${dayLabel(day)}</b> · today's board`,
     titles.join(" · "),
     "",
   ];
-  const players = [...new Set([...results.map((r) => r.player_id), ...(imitation?.entrants ?? [])])]
+  const players = [...new Set(results.map((r) => r.player_id))]
     .map((id) => ({
       id,
-      done: [
-        ...GAMES.map((g) => results.some((r) => r.player_id === id && r.game === g.id)),
-        ...(imitation ? [imitation.entrants.has(id)] : []),
-      ],
+      done: GAMES.map((g) => results.some((r) => r.player_id === id && r.game === g.id)),
     }))
     .sort((a, b) => b.done.filter(Boolean).length - a.done.filter(Boolean).length || nameOf(names, a.id).localeCompare(nameOf(names, b.id)));
   if (players.length === 0) lines.push("<i>Nobody has played yet.</i>");
@@ -108,11 +101,9 @@ export function renderSummary(opts: {
   results: ResultRow[];
   names: Map<number, string>;
   blowoutReport?: BlowoutReport | null;
-  /** The day's imitation result, when it counts towards the overall score. */
-  imitation?: DayImitation | null;
   interim?: boolean;
 }): string {
-  const { day, standings, results, names, blowoutReport, imitation, interim } = opts;
+  const { day, standings, results, names, blowoutReport, interim } = opts;
   const lines = [interim ? `⏱️ <b>Väliaikatilanne · ${dayLabel(day)}</b>` : `🏁 <b>Results · ${dayLabel(day)}</b>`];
   for (const game of GAMES) {
     lines.push("", `<b>${escapeHtml(gameTitle(game, day))}</b>`);
@@ -120,18 +111,10 @@ export function renderSummary(opts: {
     if (rows.length === 0) lines.push("<i>Nobody played.</i>");
     for (const s of rows) lines.push(`${placeMark(s.rank)} ${nameOf(names, s.playerId)} · ${s.value}`);
   }
-  if (imitation) {
-    lines.push("", `<b>🎭 Imitaatio: ${escapeHtml(imitation.name)}</b>`);
-    for (const s of standings.get("imitation") ?? []) {
-      const score = imitation.scores.get(s.playerId)!;
-      lines.push(`${placeMark(s.rank)} ${nameOf(names, s.playerId)} · ${score.points}/${score.max} p`);
-    }
-  }
-  const events = GAMES.length + (imitation ? 1 : 0);
+  const events = GAMES.length;
   lines.push("", `🏆 <b>Overall</b> (out of ${events * 100})`);
   for (const s of standings.get("overall") ?? []) {
-    const played =
-      new Set(results.filter((r) => r.player_id === s.playerId).map((r) => r.game)).size + (imitation?.scores.has(s.playerId) ? 1 : 0);
+    const played = new Set(results.filter((r) => r.player_id === s.playerId).map((r) => r.game)).size;
     const note = played < events ? ` · ${played}/${events} games` : "";
     lines.push(`${placeMark(s.rank)} ${nameOf(names, s.playerId)} · ${s.value.toFixed(1)}${note}`);
   }
@@ -404,7 +387,7 @@ export function renderCommands(): string {
     "• <code>!vote-leaderboard finalize</code> (tai <code>/finalize</code>) – Käynnistä äänestys päivän kisan lopullisesta sulkemisesta ja tulosten julkaisusta (toimii myös vastaamalla väliaikatilanteeseen <code>finalize</code>, <code>sulje</code> tai <code>lopullinen</code>)",
     "",
     "<b>🎭 Imitaatiokisa</b>",
-    "• <code>/haaste</code> – Päivän imitaatiohaaste, saapuneet äänitteet ja äänestyksen tilanne",
+    "• <code>/haaste</code> – Viikon imitaatiohaaste, saapuneet äänitteet ja äänestyksen tilanne",
     "• <code>/ehdota Nimi</code> – Lisää uusi hahmo tai henkilö imitaatioiden arvontalistalle",
     "• <code>/ehdotukset</code> – Listaa arvonnassa jäljellä olevat imitaatioehdotukset",
     "• <code>/aanesta</code> – Pyydä uusi äänestyslippu yksityisviestinä äänestyksen ollessa käynnissä",
@@ -435,7 +418,7 @@ export function renderHelp(opts: { closeTime: string; timeZone: string; linked: 
     "• Vain päivän pelit lasketaan, eivät Unlimited-, arkisto- tai teemapelit eivätkä Size It Upin Pop Culture tai Geography.",
     "• Vain ensimmäinen tulos kustakin pelistä lasketaan.",
     "• Size It Upin tuloksessa ei ole pelinumeroa, joten se lasketaan sille päivälle, jona lähetät sen.",
-    "• Kokonaispisteet: jokainen peli prosentteina maksimistaan, yhteensä enintään 300, tai 400 kun päivällä on imitaatiohaaste. Pelaamatta jäänyt peli on 0.",
+    "• Kokonaispisteet: jokainen peli prosentteina maksimistaan, yhteensä enintään 300. Pelaamatta jäänyt peli on 0.",
     "",
     "<b>Komennot</b>",
     "!help (tai /komennot) – luettelee kaikki käytössä olevat komennot",
@@ -450,11 +433,11 @@ export function renderHelp(opts: { closeTime: string; timeZone: string; linked: 
     "/help – tämä ohje",
     "",
     "<b>🎭 Imitaatiokisa</b>",
-    "• Arvon joka aamu klo 9 päivän hahmon tai ihmisen ehdotuslistalta. Sama ei tule kahdesti.",
+    "• Arvon kerran viikossa satunnaisena päivänä klo 9 hahmon tai ihmisen ehdotuslistalta. Sama ei tule kahdesti.",
     "• Lähetä imitaatiosi ääniviestinä ryhmään klo 21 mennessä. Viimeisin äänitteesi lasketaan.",
     "• Kun kaikki ovat lähettäneet, viimeistään klo 21, lähetän jokaiselle äänestyslipun yksityisviestinä. Valitse paras (3 p) ja toiseksi paras (1 p). Omaa suoritusta ei voi äänestää.",
-    "• Tulokset tulevat, kun kaikki ovat äänestäneet, viimeistään palkintojenjaossa. Imitaatio lasketaan päivän kokonaispisteisiin neljäntenä lajina: saadut pisteet prosentteina maksimista.",
-    "/haaste – päivän hahmo ja tilanne",
+    "• Tulokset julkaistaan omana viestinään, kun kaikki ovat äänestäneet tai kun päivä sulkeutuu. Imitaatiokisa on erillään päivän peleistä, ja sen mitalit näkyvät /leaderboard- ja /me-komennoissa.",
+    "/haaste – viikon hahmo ja tilanne",
     "/ehdota Nimi – lisää hahmo tai ihminen ehdotuslistalle",
     "/ehdotukset – arvottavana olevat ehdotukset",
     "/aanesta – uusi äänestyslippu yksityisviestinä",

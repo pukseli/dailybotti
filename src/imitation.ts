@@ -1,15 +1,14 @@
-// Imitation contest. Every morning the bot draws a character or person from the group's suggestions. Players
-// post their imitation as a voice message in the group. Once everyone has (or at the deadline), each player
-// gets a private ballot and ranks the others: 1st = 3 points, 2nd = 1 point. Nobody can vote for themselves.
-// The result counts in the day's overall score as a fourth event: points received as a percentage of the most
-// that player could have got.
+// Imitation contest. Once a week on a random day (Mon–Sun) the bot draws a character or person from the group's
+// suggestions. Players post their imitation as a voice message in the group. Once everyone has (or at the deadline),
+// each player gets a private ballot and ranks the others: 1st = 3 points, 2nd = 1 point. Nobody can vote for
+// themselves. The contest is standalone from the daily games; its medals appear in /leaderboard and /me.
 
 import { dayIsClosed, EXPECTED_PLAYERS, isGroupMember, reply, sendToGroup, today, tryCall, type Ctx } from "./chat";
-import { allPlayers, ensureDay, getDay, upsertPlayer, type Settings } from "./db";
+import { allPlayers, savePlacements, upsertPlayer, type Settings } from "./db";
 import { displayNames, escapeHtml, fit } from "./render";
 import { placeMark, rank } from "./scoring";
 import { isNotModified, type CallbackQuery, type InlineKeyboardButton, type Message, type User } from "./telegram";
-import { addDays, localParts } from "./time";
+import { addDays, daysBetween, localParts, weekMonday } from "./time";
 
 /** The day's character is drawn and announced at this time. */
 export const CHALLENGE_TIME = "09:00";
@@ -236,23 +235,31 @@ export async function imitationForDay(db: D1Database, day: string): Promise<DayI
 }
 
 /**
- * Whether the day's contest could still change its podium: a vote that hasn't ended, or a draw still to come.
- * The early podium (when everyone has played everything) waits for it.
+ * Picks or returns the week's random contest day (Mon–Sun). Stored in settings under `imitation_week:<monday>`.
+ * If a week already had a drawn challenge before this setting existed, that day is adopted.
  */
-export async function imitationPending(ctx: Ctx, day: string): Promise<boolean> {
-  const row = await getImitationDay(ctx.db, day);
-  if (row) return row.closed_at === null;
-  const { date, time } = localParts(ctx.now, ctx.timeZone);
-  if (day < date || (day === date && time >= VOTE_DEADLINE)) return false;
-  return (await unusedSuggestionCount(ctx.db)) > 0;
-}
+export async function weeklyChallengeDay(db: D1Database, day: string): Promise<string> {
+  const monday = weekMonday(day);
+  const sunday = addDays(monday, 6);
+  const key = `imitation_week:${monday}`;
+  const saved = await db.prepare("SELECT value FROM settings WHERE key = ?").bind(key).first<{ value: string }>();
+  if (saved?.value) return saved.value;
 
-/** What the day's board shows: the character and who has sent a recording. */
-export async function imitationForBoard(db: D1Database, day: string): Promise<{ name: string; entrants: Set<number> } | null> {
-  const row = await getImitationDay(db, day);
-  if (!row?.name) return null;
-  const entries = await entriesFor(db, day);
-  return { name: row.name, entrants: new Set(entries.map((e) => e.player_id)) };
+  const existing = await db
+    .prepare("SELECT day FROM imitation_days WHERE day >= ? AND day <= ? AND suggestion_id IS NOT NULL ORDER BY day DESC LIMIT 1")
+    .bind(monday, sunday)
+    .first<{ day: string }>();
+  if (existing) {
+    await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").bind(key, existing.day).run();
+    return existing.day;
+  }
+
+  const startDay = day > monday ? day : monday;
+  const remaining = daysBetween(startDay, sunday) + 1;
+  const chosen = addDays(startDay, Math.floor(Math.random() * remaining));
+  await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").bind(key, chosen).run();
+  const final = await db.prepare("SELECT value FROM settings WHERE key = ?").bind(key).first<{ value: string }>();
+  return final?.value ?? chosen;
 }
 
 // ---------- texts ----------
@@ -280,7 +287,7 @@ function messageLink(groupChatId: number | null, messageId: number): string | nu
 function renderAnnouncement(name: string, botUsername: string | null): string {
   const bot = botUsername ? `@${escapeHtml(botUsername)}` : "minut";
   return [
-    `🎭 <b>Päivän imitaatio: ${escapeHtml(name)}</b>`,
+    `🎭 <b>Viikon imitaatio: ${escapeHtml(name)}</b>`,
     "",
     `Lähetä imitaatiosi ääniviestinä tähän ryhmään klo ${VOTE_DEADLINE} mennessä. Viimeisin äänitteesi lasketaan.`,
     `Kun kaikki ovat lähettäneet, viimeistään klo ${VOTE_DEADLINE}, saatte äänestyslipun yksityisviestinä. Paras saa ${FIRST_POINTS} pistettä ja toiseksi paras ${SECOND_POINTS}. Omaa suoritusta ei voi äänestää.`,
@@ -359,32 +366,24 @@ function renderResults(imitation: DayImitation, names: Map<number, string>): str
     const score = imitation.scores.get(s.playerId)!;
     lines.push(`${placeMark(s.rank)} ${nameOf(names, s.playerId)} · ${score.points}/${score.max} p`);
   }
-  lines.push("", "Pisteet lasketaan mukaan päivän kokonaispisteisiin.");
   return lines.join("\n");
 }
 
 // ---------- the day's flow (run every minute) ----------
 
-/** Closes an open imitation contest when the day is finalized early: counts votes if voting had started, or cancels it. */
-export async function finishImitationForDay(ctx: Ctx, settings: Settings, day: string): Promise<void> {
-  const row = await getImitationDay(ctx.db, day);
-  if (!row || row.closed_at) return;
-  if (row.vote_opened_at) await closeVote(ctx, settings, day, false);
-  else await closeChallenge(ctx.db, day, ctx.now.toISOString(), true);
-}
-
-/** Draws and announces the day's character, opens the vote at the deadline, and ends votes when their day closes. */
+/** Draws and announces the week's character on its chosen day, opens the vote at the deadline, and ends votes when their day closes. */
 export async function imitationTick(ctx: Ctx, settings: Settings): Promise<void> {
   // Days that have ended: count the votes, or call the contest off if the vote never started.
   for (const row of await openChallenges(ctx.db)) {
     if (!dayIsClosed(ctx, row.day)) continue;
-    if (row.vote_opened_at) await closeVote(ctx, settings, row.day, false);
+    if (row.vote_opened_at) await closeVote(ctx, settings, row.day);
     else await closeChallenge(ctx.db, row.day, ctx.now.toISOString(), true);
   }
 
   const { date: day, time } = localParts(ctx.now, ctx.timeZone);
   if (dayIsClosed(ctx, day) || time < CHALLENGE_TIME) return;
-  if ((await getDay(ctx.db, day))?.finalized_at) return;
+  const challengeDay = await weeklyChallengeDay(ctx.db, day);
+  if (day !== challengeDay) return;
   if (time < VOTE_DEADLINE) {
     await drawAndAnnounce(ctx, settings, day);
     return;
@@ -405,10 +404,13 @@ async function drawAndAnnounce(ctx: Ctx, settings: Settings, day: string): Promi
   if (row.name) {
     text = renderAnnouncement(row.name, settings.botUsername);
   } else {
-    // Mention it once, on the first day the suggestions have run out, not every day after.
-    const yesterday = await getImitationDay(ctx.db, addDays(day, -1));
-    if (!yesterday?.name) return;
-    text = "🎭 Imitaatioehdotukset ovat loppuneet, joten tänään ei ole imitaatiohaastetta. Lisää uusia: /ehdota Nimi";
+    // Mention it once, on the first draw where the suggestions have run out, not every time after.
+    const prev = await ctx.db
+      .prepare("SELECT suggestion_id FROM imitation_days WHERE day < ? ORDER BY day DESC LIMIT 1")
+      .bind(day)
+      .first<{ suggestion_id: number | null }>();
+    if (!prev || prev.suggestion_id === null) return;
+    text = "🎭 Imitaatioehdotukset ovat loppuneet, joten tällä viikolla ei ole imitaatiohaastetta. Lisää uusia: /ehdota Nimi";
   }
   if (!(await claimAnnouncement(ctx.db, day))) return;
   try {
@@ -428,7 +430,7 @@ async function openVote(ctx: Ctx, settings: Settings, day: string): Promise<void
   if (entries.length < 2) {
     await closeChallenge(ctx.db, day, ctx.now.toISOString(), true);
     const count = entries.length === 0 ? "ei tullut yhtään suoritusta" : "tuli vain yksi suoritus";
-    await sendToGroup(ctx, settings, `🎭 Imitaatioon (${escapeHtml(row.name!)}) ${count}, joten äänestystä ei järjestetä eikä imitaatio vaikuta tämän päivän pisteisiin.`);
+    await sendToGroup(ctx, settings, `🎭 Imitaatioon (${escapeHtml(row.name!)}) ${count}, joten äänestystä ei järjestetä.`);
     return;
   }
 
@@ -524,17 +526,25 @@ async function refreshVoteStatus(ctx: Ctx, settings: Settings, day: string): Pro
   }
 }
 
-/** Ends the vote. With `announce`, posts the imitation results straight away (the podium repeats them later). */
-async function closeVote(ctx: Ctx, settings: Settings, day: string, announce: boolean): Promise<void> {
+/** Ends the vote, saves the imitation placements and posts the results in the group. */
+async function closeVote(ctx: Ctx, settings: Settings, day: string): Promise<void> {
   if (!(await closeChallenge(ctx.db, day, ctx.now.toISOString(), false))) return;
   await refreshVoteStatus(ctx, settings, day);
-  if (!announce) return;
   const imitation = await imitationForDay(ctx.db, day);
+  if (imitation) {
+    const standings = rank([...imitation.scores].map(([playerId, s]) => ({ playerId, value: imitationPercent(s) })));
+    await savePlacements(
+      ctx.db,
+      day,
+      standings.map((s) => ({ category: "imitation" as const, playerId: s.playerId, rank: s.rank, value: s.value })),
+      ["imitation"],
+    );
+  }
   const names = displayNames(await allPlayers(ctx.db));
   await sendToGroup(
     ctx,
     settings,
-    imitation ? renderResults(imitation, names) : "🎭 Äänestys päättyi, mutta kukaan ei äänestänyt, joten imitaatio ei vaikuta tämän päivän pisteisiin.",
+    imitation ? renderResults(imitation, names) : "🎭 Äänestys päättyi, mutta kukaan ei äänestänyt.",
   );
 }
 
@@ -547,13 +557,12 @@ export function isRecording(msg: Message): boolean {
 /**
  * A voice message (or audio file or round video) in the group. Saves it as the sender's entry while the day's
  * contest is taking recordings, and starts the vote once every player has sent one.
- * Returns the day whose board should be updated.
  */
-export async function handleRecording(ctx: Ctx, settings: Settings, msg: Message, user: User): Promise<string | null> {
-  if (!isRecording(msg)) return null;
+export async function handleRecording(ctx: Ctx, settings: Settings, msg: Message, user: User): Promise<void> {
+  if (!isRecording(msg)) return;
   const day = today(ctx);
   const row = await getImitationDay(ctx.db, day);
-  if (!row?.name) return null; // no contest today: just a voice message
+  if (!row?.name) return; // no contest today: just a voice message
 
   if (row.vote_opened_at || row.closed_at) {
     // Only speak up if this looks like a late entry, not someone chatting after sending theirs.
@@ -561,12 +570,11 @@ export async function handleRecording(ctx: Ctx, settings: Settings, msg: Message
     if (!entries.some((e) => e.player_id === user.id)) {
       await reply(ctx, msg, "⏰ Äänestys on jo alkanut, joten tämä äänite ei osallistu tämän päivän imitaatioon.");
     }
-    return null;
+    return;
   }
 
   const nowIso = ctx.now.toISOString();
   await upsertPlayer(ctx.db, user, nowIso);
-  await ensureDay(ctx.db, day); // so the board and the podium include the day
   await saveEntry(ctx.db, day, user.id, msg.message_id, nowIso);
   const reacted = await tryCall(ctx, "setMessageReaction", {
     chat_id: msg.chat.id,
@@ -579,19 +587,17 @@ export async function handleRecording(ctx: Ctx, settings: Settings, msg: Message
   if (players.length >= EXPECTED_PLAYERS && players.every((p) => entries.some((e) => e.player_id === p.id))) {
     await openVote(ctx, settings, day);
   }
-  return day;
 }
 
 /**
  * A tap on a ballot button. Records the pick, edits the ballot, and ends the vote once everyone has voted.
- * Returns the day whose vote just ended, so the caller can post the podium if the day is otherwise complete.
  */
-export async function handleVoteTap(ctx: Ctx, settings: Settings, cq: CallbackQuery): Promise<string | null> {
+export async function handleVoteTap(ctx: Ctx, settings: Settings, cq: CallbackQuery): Promise<void> {
   const answer = (text: string) => tryCall(ctx, "answerCallbackQuery", { callback_query_id: cq.id, text });
   const m = /^i([vr]):(\d{4}-\d{2}-\d{2})(?::(\d+))?$/.exec(cq.data ?? "");
   if (!m) {
     await answer("");
-    return null;
+    return;
   }
   const kind = m[1];
   const day = m[2]!;
@@ -599,12 +605,12 @@ export async function handleVoteTap(ctx: Ctx, settings: Settings, cq: CallbackQu
   const row = await getImitationDay(ctx.db, day);
   if (!row?.name || !row.vote_opened_at || row.closed_at) {
     await answer("Tämä äänestys on jo päättynyt.");
-    return null;
+    return;
   }
   const ballot = await getBallot(ctx.db, day, cq.from.id);
   if (!ballot) {
     await answer("Sinulla ei ole äänestyslippua tähän äänestykseen.");
-    return null;
+    return;
   }
   const entries = await entriesFor(ctx.db, day);
   const options = ballotOptions(
@@ -623,15 +629,15 @@ export async function handleVoteTap(ctx: Ctx, settings: Settings, cq: CallbackQu
     const picked = Number(target);
     if (picked === cq.from.id) {
       await answer("Omaa suoritusta ei voi äänestää.");
-      return null;
+      return;
     }
     if (!options.includes(picked)) {
       await answer("Tätä suoritusta ei löydy.");
-      return null;
+      return;
     }
     if (wasComplete) {
       await answer("Äänesi on jo tallessa. Paina ”Muuta ääntä”, jos haluat vaihtaa.");
-      return null;
+      return;
     }
     if (ballot.first_id === null) {
       ballot.first_id = picked;
@@ -641,7 +647,7 @@ export async function handleVoteTap(ctx: Ctx, settings: Settings, cq: CallbackQu
       note = `2. ${names.get(picked) ?? picked} (${SECOND_POINTS} p)`;
     } else {
       await answer("Valitsit jo tämän parhaaksi. Valitse toiseksi paras.");
-      return null;
+      return;
     }
   }
   const complete = isBallotComplete({ firstId: ballot.first_id, secondId: ballot.second_id }, options.length);
@@ -666,17 +672,16 @@ export async function handleVoteTap(ctx: Ctx, settings: Settings, cq: CallbackQu
   }
   await answer(note);
 
-  if (complete === wasComplete) return null;
+  if (complete === wasComplete) return;
   await refreshVoteStatus(ctx, settings, day);
-  if (!complete) return null;
+  if (!complete) return;
   const ballots = await ballotsFor(ctx.db, day);
   const entrants = entries.map((e) => e.player_id);
   const everyoneVoted = ballots.every((b) =>
     isBallotComplete({ firstId: b.first_id, secondId: b.second_id }, ballotOptions(entrants, b.voter_id).length),
   );
-  if (!everyoneVoted) return null;
-  await closeVote(ctx, settings, day, true);
-  return day;
+  if (!everyoneVoted) return;
+  await closeVote(ctx, settings, day);
 }
 
 // ---------- commands ----------
@@ -756,26 +761,34 @@ export async function suggestionsCommand(ctx: Ctx, msg: Message): Promise<void> 
   );
 }
 
-/** /haaste shows the day's character and how far the contest has got. */
+/** /haaste shows the week's character and how far the contest has got. */
 export async function challengeCommand(ctx: Ctx, msg: Message): Promise<void> {
   const day = today(ctx);
   const row = await getImitationDay(ctx.db, day);
   if (!row?.name) {
-    const { time } = localParts(ctx.now, ctx.timeZone);
     const left = await unusedSuggestionCount(ctx.db);
-    const text =
-      !row && left > 0 && time < CHALLENGE_TIME
-        ? `🎭 Päivän imitaatiohaaste arvotaan klo ${CHALLENGE_TIME}.`
-        : left === 0
-          ? "🎭 Tänään ei ole imitaatiohaastetta, koska ehdotukset ovat loppu. Lisää uusia: /ehdota Nimi"
-          : "🎭 Tänään ei ole imitaatiohaastetta.";
+    if (left === 0) {
+      await reply(ctx, msg, "🎭 Tänään ei ole imitaatiohaastetta, koska ehdotukset ovat loppu. Lisää uusia: /ehdota Nimi");
+      return;
+    }
+    const monday = weekMonday(day);
+    const done = await ctx.db
+      .prepare(
+        `SELECT d.day, s.name FROM imitation_days d JOIN imitation_suggestions s ON s.id = d.suggestion_id
+         WHERE d.day >= ? AND d.day < ? ORDER BY d.day DESC LIMIT 1`,
+      )
+      .bind(monday, day)
+      .first<{ day: string; name: string }>();
+    const text = done
+      ? `🎭 Tämän viikon imitaatiohaaste (${escapeHtml(done.name)}) on jo pidetty (${finnishDate(done.day)}). Seuraava haaste arvotaan ensi viikolla.`
+      : `🎭 Tänään ei ole imitaatiohaastetta. Viikon haaste julkistetaan satunnaisena päivänä klo ${CHALLENGE_TIME}.`;
     await reply(ctx, msg, text);
     return;
   }
 
   const [entries, ballots, players] = await Promise.all([entriesFor(ctx.db, day), ballotsFor(ctx.db, day), allPlayers(ctx.db)]);
   const names = displayNames(players);
-  const lines = [`🎭 <b>Päivän imitaatio: ${escapeHtml(row.name)}</b>`, ""];
+  const lines = [`🎭 <b>Viikon imitaatio: ${escapeHtml(row.name)}</b>`, ""];
   if (!row.vote_opened_at && !row.closed_at) {
     lines.push(
       `Äänitteet (${entries.length}/${players.length}): ${players.map((p) => `${entries.some((e) => e.player_id === p.id) ? "✅" : "⏳"} ${nameOf(names, p.id)}`).join(" · ")}`,
@@ -793,7 +806,7 @@ export async function challengeCommand(ctx: Ctx, msg: Message): Promise<void> {
       await reply(ctx, msg, renderResults(imitation, names));
       return;
     }
-    lines.push("Äänestystä ei järjestetty, joten imitaatio ei vaikuta tämän päivän pisteisiin.");
+    lines.push("Äänestystä ei järjestetty.");
   }
   await reply(ctx, msg, lines.join("\n"));
 }
