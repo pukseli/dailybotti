@@ -1,7 +1,7 @@
 // Message texts. Everything is sent with parse_mode HTML, so user-provided text goes through escapeHtml.
 
 import type { PlayerRow, ResultRow, StatsRow, VoteState } from "./db";
-import { GAMES, KRILLION_SYMBOL_POINTS, gameById, gameTitle, parseRoundData, type GameId } from "./games";
+import { ERALY_SYMBOL_POINTS, GAMES, KRILLION_SYMBOL_POINTS, gameById, gameTitle, parseRoundData, type GameId } from "./games";
 import type { DayImitation } from "./imitation";
 import type { BlowoutReport, RegressioReport } from "./regressio";
 import { MEDALS, placeMark, type Category, type Standing } from "./scoring";
@@ -360,7 +360,16 @@ export function renderPlayerDayResults(opts: {
         }
       }
     } else if (game.id === "eraly") {
-      if (res.raw_text) {
+      const rounds = parseStoredRounds(res);
+      if (rounds && rounds.length > 0) {
+        const symbols = rounds.map(String);
+        lines.push(escapeHtml(symbols.join("")));
+        const breakdown = symbols.map((sym, idx) => {
+          const pts = ERALY_SYMBOL_POINTS[sym];
+          return pts !== undefined ? `${idx + 1}. ${escapeHtml(sym)} ${pts}p` : `${idx + 1}. ${escapeHtml(sym)}`;
+        });
+        lines.push(breakdown.join(" · "));
+      } else if (res.raw_text) {
         const rawLines = res.raw_text
           .split("\n")
           .map((l) => l.trim())

@@ -4,9 +4,10 @@ import { TelegramError, type ChatMember, type Telegram, type Update, type User }
 
 // Share texts built exactly the way each game's own code builds them.
 
-export function eralyShare(puzzle: number, total: number): string {
+export function eralyShare(puzzle: number, total: number, symbols?: string): string {
   const filled = Math.round((total / 700) * 10);
-  return `Eraly #${puzzle} · I travelled to 1450 AD\n${"▰".repeat(filled)}${"▱".repeat(10 - filled)} ${total}/700\nhttps://eraly.io`;
+  const squares = symbols !== undefined ? `\n${symbols}` : "";
+  return `Eraly #${puzzle} · I travelled to 1450 AD\n${"▰".repeat(filled)}${"▱".repeat(10 - filled)} ${total}/700${squares}\nhttps://eraly.io`;
 }
 
 export function krillionShare(puzzle: number, score: number, withLink = true): string {

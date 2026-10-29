@@ -965,4 +965,17 @@ describe("/tulos", () => {
     expect(tg.lastTextTo(GROUP)).toContain("🎯 <b>Anna · Fri 23 Oct</b>");
     expect(tg.lastTextTo(GROUP)).toContain("<b>Eraly #8</b> · 640/700");
   });
+
+  it("renders round breakdown for Eraly when share text includes symbols", async () => {
+    await linkGroup();
+    const eralyWithSymbols = eralyShare(8, 510, "🟨🟩🟦🟧🟥🟨💤");
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, eralyWithSymbols));
+    tg.clear();
+
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, "/tulos eraly"));
+    const text = tg.lastTextTo(anna.id);
+    expect(text).toContain("<b>Eraly #8</b> · 510/700");
+    expect(text).toContain("🟨🟩🟦🟧🟥🟨💤");
+    expect(text).toContain("1. 🟨 100p · 2. 🟩 60p · 3. 🟦 85p · 4. 🟧 30p · 5. 🟥 10p · 6. 🟨 100p · 7. 💤 0p");
+  });
 });

@@ -105,18 +105,30 @@ describe("parseResults", () => {
       rawText: krillText,
     });
 
-    const eralyText = eralyShare(8, 420);
-    expect(parseRoundData(eralyText, "eraly")).toEqual({
+    const eralyTextOld = eralyShare(8, 420);
+    expect(parseRoundData(eralyTextOld, "eraly")).toEqual({
       rounds: null,
-      rawText: eralyText,
+      rawText: eralyTextOld,
+    });
+
+    const eralyTextNew = eralyShare(14, 510, "🟨🟩🟦🟧🟥🟨💤");
+    expect(parseRoundData(eralyTextNew, "eraly")).toEqual({
+      rounds: ["🟨", "🟩", "🟦", "🟧", "🟥", "🟨", "💤"],
+      rawText: eralyTextNew,
+    });
+
+    const eralyHalloween = "Eraly #16 🎃 · I travelled to 1580 AD\n▰▰▰▰▰▰▰▱▱▱ 510/700\n🟨🟩🟦🟧🟥🟨💤\nhttps://eraly.io";
+    expect(parseRoundData(eralyHalloween, "eraly")).toEqual({
+      rounds: ["🟨", "🟩", "🟦", "🟧", "🟥", "🟨", "💤"],
+      rawText: eralyHalloween,
     });
   });
 
   it("isolates each game's block and rounds from a combined multi-game message", () => {
-    const combined = [eralyShare(8, 640), krillionShare(100, 540), sizeItUpShare(402)].join("\n\n").replace(/\n/g, "\r\n");
+    const combined = [eralyShare(8, 640, "🟨🟨🟨🟨🟨🟨💤"), krillionShare(100, 540), sizeItUpShare(402)].join("\n\n").replace(/\n/g, "\r\n");
     expect(parseRoundData(combined, "eraly")).toEqual({
-      rounds: null,
-      rawText: eralyShare(8, 640),
+      rounds: ["🟨", "🟨", "🟨", "🟨", "🟨", "🟨", "💤"],
+      rawText: eralyShare(8, 640, "🟨🟨🟨🟨🟨🟨💤"),
     });
     expect(parseRoundData(combined, "krillion")).toEqual({
       rounds: ["🫧", "🐟", "🦑", "🏮", "🌟", "⬛", "🤡"],

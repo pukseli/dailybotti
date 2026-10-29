@@ -34,6 +34,15 @@ export const KRILLION_SYMBOL_POINTS: Record<string, number> = {
   "🌟": 100,
 };
 
+export const ERALY_SYMBOL_POINTS: Record<string, number> = {
+  "🟨": 100,
+  "🟦": 85,
+  "🟩": 60,
+  "🟧": 30,
+  "🟥": 10,
+  "💤": 0,
+};
+
 export function matchGameArg(token: string): GameId | null {
   const clean = token.trim().toLowerCase().replace(/[-_\s]+/g, "");
   if (clean === "eraly") return "eraly";
@@ -59,9 +68,10 @@ export interface RoundData {
   rawText: string | null;
 }
 
-// "Eraly #8 · I travelled to 1450 AD\n▰▰▰▰▰▰▱▱▱▱ 420/700\nhttps://eraly.io"
+// "Eraly #8 · I travelled to 1450 AD\n▰▰▰▰▰▰▱▱▱▱ 420/700\n🟨🟩🟦🟧🟥🟨💤\nhttps://eraly.io"
 const ERALY = /Eraly\s*#\s*(\d+)[\s\S]{0,200}?(?<!\d)(\d+)\s*\/\s*700(?!\d)/;
-const ERALY_BLOCK = /Eraly\s*#\s*\d+[\s\S]{0,200}?(?<!\d)\d+\s*\/\s*700(?!\d)(?:[ \t]*\n\s*https?:\/\/eraly\.io\S*)?/;
+const ERALY_BLOCK =
+  /Eraly[ \t]+#\s*\d+[^\n]*\n[^\n]*?(?<!\d)\d+\s*\/\s*700(?!\d)(?:\n[ \t]*([^\sA-Za-z0-9]+))?(?:[ \t]*\n\s*https?:\/\/eraly\.io\S*)?/;
 
 // "Krillion #100 🦐\n540\n\n🫧🐟🦑🏮🌟⬛🤡\n\nhttps://krillion.io"
 // Unlimited and archive games read "Krillion ∞ #12" / "Krillion ⟲ #12", which this deliberately doesn't match.
@@ -120,7 +130,12 @@ export function parseRoundData(input: string, game: GameId): RoundData {
   const text = input.replace(/\r\n?/g, "\n");
   if (game === "eraly") {
     const m = ERALY_BLOCK.exec(text);
-    return { rounds: null, rawText: m ? m[0].trim() : null };
+    if (!m) return { rounds: null, rawText: null };
+    const symbols = m[1] ? [...graphemeSegmenter.segment(m[1].trim())].map((s) => s.segment) : null;
+    return {
+      rounds: symbols && symbols.length > 0 ? symbols : null,
+      rawText: m[0].trim(),
+    };
   }
   if (game === "krillion") {
     const m = KRILLION_BLOCK.exec(text);
