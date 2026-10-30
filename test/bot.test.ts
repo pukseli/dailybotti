@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
-import { handleUpdate, tick } from "../src/bot";
+import { finalizeDay, handleUpdate, tick } from "../src/bot";
 import { COMMAND_MENUS, GROUP_COMMANDS, PRIVATE_COMMANDS } from "../src/commands";
 import { getSettings } from "../src/db";
 import { TelegramError } from "../src/telegram";
@@ -333,6 +333,28 @@ describe("a full day", () => {
     // One failed attempt, then one that went through.
     expect(groupTexts().filter((t) => t.startsWith("🏁"))).toHaveLength(2);
   });
+
+  it("posts the podium once when two closes run at the same time", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, eralyShare(8, 600)));
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, eralyShare(8, 300)));
+    tg.clear();
+    const ctx = makeCtx(tg, SAT_0000);
+    const settings = await getSettings(env.DB);
+    await Promise.all([finalizeDay(ctx, settings, "2026-10-23"), finalizeDay(ctx, settings, "2026-10-23")]);
+    expect(groupTexts().filter((t) => t.startsWith("🏁"))).toHaveLength(1);
+  });
+
+  it("posts the podium once when the last result races the minute tick", async () => {
+    await linkGroup();
+    for (const p of [anna, ben, chris]) {
+      await handleUpdate(makeCtx(tg, FRI_NOON), dm(p, [eralyShare(8, 500), krillionShare(100, 400), sizeItUpShare(400)].join("\n\n")));
+    }
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(dan, [eralyShare(8, 500), krillionShare(100, 400)].join("\n\n")));
+    tg.clear();
+    await Promise.all([handleUpdate(makeCtx(tg, FRI_NOON), dm(dan, sizeItUpShare(450))), tick(makeCtx(tg, FRI_NOON))]);
+    expect(groupTexts().filter((t) => t.startsWith("🏁"))).toHaveLength(1);
+  });
 });
 
 describe("results posted in the group", () => {
@@ -577,6 +599,32 @@ describe("/regressio and blowout analysis", () => {
     tg.clear();
     await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(ben, "/regressio Anna"));
     expect(tg.lastTextTo(GROUP)).toContain("REGRESSIOANALYYSI: Anna");
+  });
+
+  it("keeps another player's private scores out of /regressio until the day closes", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, eralyShare(8, 700)));
+    tg.clear();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(ben, "/regressio anna"));
+    expect(tg.lastTextTo(GROUP)).not.toContain("700");
+    expect(tg.lastTextTo(GROUP)).toContain("Ei tallennettuja pelejä");
+
+    await tick(makeCtx(tg, SAT_0000));
+    await handleUpdate(makeCtx(tg, SAT_0001), inGroup(ben, "/regressio anna"));
+    expect(tg.lastTextTo(GROUP)).toContain("eraly (700/700)");
+  });
+
+  it("keeps private scores out of /regressio sent as a reply to the player", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, eralyShare(8, 700)));
+    const chat = inGroup(anna, "moi");
+    await handleUpdate(makeCtx(tg, FRI_NOON), chat);
+    tg.clear();
+    const replyCommand = inGroup(ben, "/regressio");
+    replyCommand.message!.reply_to_message = chat.message;
+    await handleUpdate(makeCtx(tg, FRI_NOON), replyCommand);
+    expect(tg.lastTextTo(GROUP)).toContain("REGRESSIOANALYYSI: Anna");
+    expect(tg.lastTextTo(GROUP)).not.toContain("700");
   });
 
   it("analyzes the leaderboard leader directly when /regressio is run without arguments", async () => {

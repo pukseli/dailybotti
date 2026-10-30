@@ -162,6 +162,7 @@ export interface DayRow {
   board_message_id: number | null;
   board_text: string | null;
   board_claim_until: string | null;
+  finalize_claim_until: string | null;
   finalized_at: string | null;
 }
 
@@ -227,8 +228,24 @@ export async function savePlacements(db: D1Database, day: string, rows: Placemen
   ]);
 }
 
+/** Lets only one request post a day's podium; the claim expires in case that request dies. */
+export async function claimFinalize(db: D1Database, day: string, nowIso: string, untilIso: string): Promise<boolean> {
+  const res = await db
+    .prepare(
+      `UPDATE days SET finalize_claim_until = ?
+       WHERE day = ? AND finalized_at IS NULL AND (finalize_claim_until IS NULL OR finalize_claim_until < ?)`,
+    )
+    .bind(untilIso, day, nowIso)
+    .run();
+  return res.meta.changes > 0;
+}
+
+export async function releaseFinalize(db: D1Database, day: string): Promise<void> {
+  await db.prepare("UPDATE days SET finalize_claim_until = NULL WHERE day = ?").bind(day).run();
+}
+
 export async function markFinalized(db: D1Database, day: string, nowIso: string): Promise<void> {
-  await db.prepare("UPDATE days SET finalized_at = ? WHERE day = ?").bind(nowIso, day).run();
+  await db.prepare("UPDATE days SET finalized_at = ?, finalize_claim_until = NULL WHERE day = ?").bind(nowIso, day).run();
 }
 
 export interface StatsRow {

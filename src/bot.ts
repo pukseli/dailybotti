@@ -2,6 +2,7 @@ import {
   allPlayers,
   allResultsForPlayer,
   claimBoardPost,
+  claimFinalize,
   clearBoard,
   ensureDay,
   getDay,
@@ -12,6 +13,7 @@ import {
   latestDayWithResults,
   markFinalized,
   openDays,
+  releaseFinalize,
   resultsForDay,
   savePlacements,
   saveBoard,
@@ -79,6 +81,7 @@ import { addDays, dayLabel } from "./time";
 export type { Ctx } from "./chat";
 
 const BOARD_CLAIM_MS = 60_000;
+const FINALIZE_CLAIM_MS = 60_000;
 
 export const VOTE_THRESHOLD = 4;
 
@@ -224,6 +227,14 @@ async function findTargetPlayer(
   return { id: caller.id, name: names.get(caller.id) ?? caller.first_name };
 }
 
+/** A player's results as the caller may see them: other players' scores stay hidden until the day's podium. */
+async function revealedResultsForPlayer(ctx: Ctx, playerId: number, caller: User): Promise<ResultRow[]> {
+  const results = await allResultsForPlayer(ctx.db, playerId);
+  if (playerId === caller.id) return results;
+  const hidden = new Set((await openDays(ctx.db)).filter((day) => !dayIsClosed(ctx, day)));
+  return results.filter((r) => !hidden.has(r.day));
+}
+
 async function regressioAction(ctx: Ctx, msg: Message, caller: User, text: string): Promise<void> {
   const players = await allPlayers(ctx.db);
   const names = displayNames(players);
@@ -270,7 +281,7 @@ Regressoitu todellinen taso: ${stats.regressedAverage.toFixed(1)} / 5.0 (pudotus
 
     if (replyMsg.from) {
       const targetName = names.get(replyMsg.from.id) ?? replyMsg.from.first_name;
-      const results = await allResultsForPlayer(ctx.db, replyMsg.from.id);
+      const results = await revealedResultsForPlayer(ctx, replyMsg.from.id, caller);
       const stats = calculateRegression(results);
 
       let explanation = "";
@@ -302,7 +313,7 @@ Regressoitu todellinen taso: ${stats.regressedAverage.toFixed(1)} / 5.0 (pudotus
   // Not a reply (or replied message had no results / user)
   const arg = text.replace(/^\/[a-zA-Z0-9_]+(@[a-zA-Z0-9_]+)?\s*/i, "").trim();
   const target = await findTargetPlayer(ctx.db, names, arg, caller);
-  const results = await allResultsForPlayer(ctx.db, target.id);
+  const results = await revealedResultsForPlayer(ctx, target.id, caller);
   const stats = calculateRegression(results);
 
   let explanation = "";
@@ -1031,9 +1042,17 @@ export async function refreshBoard(ctx: Ctx, settings: Settings, day: string): P
 // ---------- daily close ----------
 
 export async function finalizeDay(ctx: Ctx, settings: Settings, day: string): Promise<void> {
-  const dayRow = await getDay(ctx.db, day);
-  if (dayRow?.finalized_at) return;
+  const until = new Date(ctx.now.getTime() + FINALIZE_CLAIM_MS).toISOString();
+  if (!(await claimFinalize(ctx.db, day, ctx.now.toISOString(), until))) return;
+  try {
+    await postPodium(ctx, settings, day);
+  } catch (err) {
+    await releaseFinalize(ctx.db, day);
+    throw err;
+  }
+}
 
+async function postPodium(ctx: Ctx, settings: Settings, day: string): Promise<void> {
   const results = await resultsForDay(ctx.db, day);
   if (results.length === 0) {
     await markFinalized(ctx.db, day, ctx.now.toISOString());
