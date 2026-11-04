@@ -210,8 +210,8 @@ describe("parseResults", () => {
 
 describe("time", () => {
   it("formats days", () => {
-    expect(dayLabel("2026-10-23")).toBe("Fri 23 Oct");
-    expect(dayLabel("2027-01-01")).toBe("Fri 1 Jan");
+    expect(dayLabel("2026-10-23")).toBe("2026-10-23");
+    expect(dayLabel("2027-01-01")).toBe("2027-01-01");
     expect(addDays("2026-12-31", 1)).toBe("2027-01-01");
     expect(addDays("2026-03-01", -1)).toBe("2026-02-28");
   });

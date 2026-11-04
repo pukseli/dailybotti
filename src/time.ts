@@ -59,14 +59,9 @@ export function weekMonday(day: string): string {
   return addDays(day, offset);
 }
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-/** "2026-10-23" → "Fri 23 Oct" */
+/** Returns ISO-8601 date string ("YYYY-MM-DD"). */
 export function dayLabel(day: string): string {
-  const [y, m, d] = day.split("-").map(Number) as [number, number, number];
-  const date = new Date(Date.UTC(y, m - 1, d));
-  return `${WEEKDAYS[date.getUTCDay()]} ${d} ${MONTHS[m - 1]}`;
+  return day;
 }
 
 /**

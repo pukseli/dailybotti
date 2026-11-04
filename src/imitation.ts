@@ -264,10 +264,9 @@ export async function weeklyChallengeDay(db: D1Database, day: string): Promise<s
 
 // ---------- texts ----------
 
-/** "2026-10-23" → "23.10." */
+/** Returns ISO-8601 date string ("YYYY-MM-DD"). */
 function finnishDate(day: string): string {
-  const [, m, d] = day.split("-").map(Number);
-  return `${d}.${m}.`;
+  return day;
 }
 
 function closesLabel(closeTime: string): string {

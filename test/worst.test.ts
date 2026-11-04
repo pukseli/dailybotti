@@ -350,7 +350,7 @@ describe("new worst personal score alerts", () => {
     await finalizeDay(makeCtx(tg, "2026-10-23T21:05:00Z"), settings, "2026-10-23");
 
     const text = tg.lastTextTo(GROUP);
-    expect(text).toContain("🏁 <b>Results · Fri 23 Oct</b>");
+    expect(text).toContain("🏁 <b>Results · 2026-10-23</b>");
     // Anna gets a new worst score alert
     expect(text).toMatch(/(POHJANOTEERAUS|POHJAKOSKETUS|RIMANALITUS)/);
     expect(text).toContain("Anna");

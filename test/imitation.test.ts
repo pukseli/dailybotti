@@ -121,7 +121,7 @@ describe("suggestions", () => {
     await suggest("Mikki Hiiri");
     await tick(makeCtx(tg, T0900));
     await handleUpdate(makeCtx(tg, T1200), inGroup(ben, "/ehdota Mikki Hiiri"));
-    expect(tg.lastTextTo(GROUP)).toBe("Mikki Hiiri oli jo haasteena 23.10.");
+    expect(tg.lastTextTo(GROUP)).toBe("Mikki Hiiri oli jo haasteena 2026-10-23");
   });
 });
 
@@ -149,7 +149,7 @@ describe("the weekly draw", () => {
     expect(groupTexts().filter((t) => t.startsWith("🎭 <b>Viikon imitaatio:"))).toHaveLength(1);
 
     await handleUpdate(makeCtx(tg, SAT0900), inGroup(ben, "/haaste"));
-    expect(tg.lastTextTo(GROUP)).toBe("🎭 Tämän viikon imitaatiohaaste (Mikki Hiiri) on jo pidetty (23.10.). Seuraava haaste arvotaan ensi viikolla.");
+    expect(tg.lastTextTo(GROUP)).toBe("🎭 Tämän viikon imitaatiohaaste (Mikki Hiiri) on jo pidetty (2026-10-23). Seuraava haaste arvotaan ensi viikolla.");
   });
 
   it("picks one random day in the week (Mon–Sun) when no day is stored yet", async () => {

@@ -195,7 +195,7 @@ describe("private results", () => {
   it("refuses puzzles from a closed day and puzzles that aren't out yet", async () => {
     await linkGroup();
     await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, eralyShare(7, 500)));
-    expect(tg.lastTextTo(ben.id)).toContain("Eraly #7 is for Thu 22 Oct, which has already closed.");
+    expect(tg.lastTextTo(ben.id)).toContain("Eraly #7 is for 2026-10-22, which has already closed.");
     await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, krillionShare(105, 500)));
     expect(tg.lastTextTo(ben.id)).toContain("isn't out yet");
     const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM results").first<{ n: number }>();
@@ -207,7 +207,7 @@ describe("private results", () => {
     // 22:00 Friday in Los Angeles is already Saturday in New York, so Krillion #101 is out.
     const ctx = makeCtx(tg, "2026-10-24T05:00:00Z", { timeZone: "America/Los_Angeles" });
     await handleUpdate(ctx, dm(ben, krillionShare(101, 400)));
-    expect(tg.lastTextTo(ben.id)).toContain("Krillion #101: 400/700 saved for Sat 24 Oct.");
+    expect(tg.lastTextTo(ben.id)).toContain("Krillion #101: 400/700 saved for 2026-10-24.");
     expect(tg.sentTo(GROUP)).toHaveLength(0); // Friday's board isn't touched
     const row = await env.DB.prepare("SELECT day FROM results").first<{ day: string }>();
     expect(row?.day).toBe("2026-10-24");
@@ -240,7 +240,7 @@ describe("a full day", () => {
     const board = tg.sentTo(GROUP);
     expect(board).toHaveLength(1);
     expect(board[0]!.params.disable_notification).toBe(true);
-    expect(board[0]!.params.text).toContain("Fri 23 Oct");
+    expect(board[0]!.params.text).toContain("2026-10-23");
     expect(board[0]!.params.text).toContain("Eraly #8 · Krillion #100 · Size It Up");
     expect(board[0]!.params.text).toContain("✅✅✅ Anna");
     expect(board[0]!.params.text).toContain("@PodiumTestBot");
@@ -271,13 +271,13 @@ describe("a full day", () => {
     expect(summary).toHaveLength(1);
     expect(summary[0]!.params.disable_notification).toBeUndefined();
     const text = summary[0]!.params.text as string;
-    expect(text).toContain("🏁 <b>Results · Fri 23 Oct</b>");
+    expect(text).toContain("🏁 <b>Results · 2026-10-23</b>");
     expect(text).toContain("<b>Eraly #8</b>\n🥇 Anna · 640\n🥈 Ben · 610");
     expect(text).toContain("<b>Krillion #100</b>\n🥇 Anna · 540\n🥇 Chris · 540");
     expect(text).toContain("<b>Size It Up</b>\n🥇 Chris · 455\n🥈 Anna · 402");
     // Anna 91.4 + 77.1 + 80.4 = 249.0; Chris 77.1 + 91.0 = 168.1; Ben 87.1
     expect(text).toContain("🏆 <b>Overall</b> (out of 300)\n🥇 Anna · 249.0\n🥈 Chris · 168.1 · 2/3 games\n🥉 Ben · 87.1 · 1/3 games");
-    expect(tg.of("editMessageText").at(-1)!.params.text).toContain("🔒 <b>Fri 23 Oct</b> · closed");
+    expect(tg.of("editMessageText").at(-1)!.params.text).toContain("🔒 <b>2026-10-23</b> · closed");
 
     // It happens once.
     tg.clear();
@@ -317,7 +317,7 @@ describe("a full day", () => {
     tg.clear();
     await tick(makeCtx(tg, "2026-10-24T09:00:00Z"));
     const posted = groupTexts().filter((t) => t.startsWith("🏁"));
-    expect(posted.map((t) => t.split("\n")[0])).toEqual(["🏁 <b>Results · Thu 22 Oct</b>", "🏁 <b>Results · Fri 23 Oct</b>"]);
+    expect(posted.map((t) => t.split("\n")[0])).toEqual(["🏁 <b>Results · 2026-10-22</b>", "🏁 <b>Results · 2026-10-23</b>"]);
   });
 
   it("retries the podium next minute if Telegram fails", async () => {
@@ -397,7 +397,7 @@ describe("results posted in the group", () => {
     expect(answer?.params.text).toBe(
       [
         "✅ Size It Up: 350/500 saved.",
-        "⛔ Eraly #7 is for Thu 22 Oct, which has already closed.",
+        "⛔ Eraly #7 is for 2026-10-22, which has already closed.",
         "ℹ️ You already sent Krillion #100 (300/700). Only the first result counts.",
       ].join("\n"),
     );
@@ -671,7 +671,7 @@ describe("/regressio and blowout analysis", () => {
 
     await tick(makeCtx(tg, SAT_0000));
     const summary = tg.lastTextTo(GROUP);
-    expect(summary).toContain("Results · Fri 23 Oct");
+    expect(summary).toContain("Results · 2026-10-23");
     expect(summary).toContain("TILASTOVALVONTA: Epäilyttävä ylivoima havaittu!");
     expect(summary).toContain("Anna oli");
   });
@@ -706,7 +706,7 @@ describe("/regressio and blowout analysis", () => {
       // The podium summary was immediately posted in the group without waiting for midnight!
       const posted = groupTexts().filter((t) => t.startsWith("🏁"));
       expect(posted).toHaveLength(1);
-      expect(posted[0]).toContain("🏁 <b>Results · Fri 23 Oct</b>");
+      expect(posted[0]).toContain("🏁 <b>Results · 2026-10-23</b>");
       expect(posted[0]).toContain("🏆 <b>Overall</b> (out of 300)");
 
       // The day is marked finalized in DB
@@ -886,7 +886,7 @@ describe("!vote-leaderboard", () => {
 
     // Interim summary is posted in the group
     const interimPost = tg.sentTo(GROUP)[0]!;
-    expect(interimPost.params.text).toContain("⏱️ <b>Väliaikatilanne · Fri 23 Oct</b>");
+    expect(interimPost.params.text).toContain("⏱️ <b>Väliaikatilanne · 2026-10-23</b>");
     expect(interimPost.params.text).toContain("🥇 Anna · 640");
     expect(interimPost.params.text).toContain("🥈 Ben · 550");
     expect(interimPost.params.text).toContain('Vastaa tähän viestiin "finalize"');
@@ -920,7 +920,7 @@ describe("!vote-leaderboard", () => {
 
     // Final results are posted with Chris's new score included, and the day is finalized!
     const finalSummary = groupTexts().find((t) => t.startsWith("🏁"))!;
-    expect(finalSummary).toContain("🏁 <b>Results · Fri 23 Oct</b>");
+    expect(finalSummary).toContain("🏁 <b>Results · 2026-10-23</b>");
     expect(finalSummary).toContain("🥇 Chris · 690");
     expect(finalSummary).toContain("🥈 Anna · 640");
 
@@ -942,7 +942,7 @@ describe("!vote-leaderboard", () => {
       await handleUpdate(makeCtx(tg, FRI_EVENING), clickButton(u, "vote:finalize:yes", voteMsgId));
     }
 
-    expect(groupTexts().some((t) => t.startsWith("🏁 <b>Results · Fri 23 Oct</b>"))).toBe(true);
+    expect(groupTexts().some((t) => t.startsWith("🏁 <b>Results · 2026-10-23</b>"))).toBe(true);
     const dayRow = await env.DB.prepare("SELECT finalized_at AS f FROM days WHERE day = '2026-10-23'").first<{ f: string | null }>();
     expect(dayRow?.f).not.toBeNull();
   });
@@ -961,7 +961,7 @@ describe("/tulos", () => {
     // Anna can view her own Krillion breakdown while the day is still open
     await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/tulos krillion"));
     const annaKrill = tg.lastTextTo(GROUP);
-    expect(annaKrill).toContain("🎯 <b>Anna · Fri 23 Oct</b>");
+    expect(annaKrill).toContain("🎯 <b>Anna · 2026-10-23</b>");
     expect(annaKrill).toContain("<b>Krillion #100</b> · 540/700");
     expect(annaKrill).toContain("🫧🐟🦑🏮🌟⬛🤡");
     expect(annaKrill).toContain("1. 🫧 10p · 2. 🐟 30p · 3. 🦑 60p · 4. 🏮 85p · 5. 🌟 100p · 6. ⬛ 0p · 7. 🤡 15p");
@@ -989,7 +989,7 @@ describe("/tulos", () => {
 
     await handleUpdate(makeCtx(tg, SAT_0001), inGroup(ben, "/tulos Anna krillion"));
     const afterClose = tg.lastTextTo(GROUP);
-    expect(afterClose).toContain("🎯 <b>Anna · Fri 23 Oct</b>");
+    expect(afterClose).toContain("🎯 <b>Anna · 2026-10-23</b>");
     expect(afterClose).toContain("<b>Krillion #100</b> · 540/700");
     expect(afterClose).toContain("1. 🫧 10p");
 
@@ -1010,7 +1010,7 @@ describe("/tulos", () => {
 
     // All 4 players finished -> Friday is finalized even at FRI_EVENING
     await handleUpdate(makeCtx(tg, FRI_EVENING), inGroup(ben, "/tulos Anna eraly"));
-    expect(tg.lastTextTo(GROUP)).toContain("🎯 <b>Anna · Fri 23 Oct</b>");
+    expect(tg.lastTextTo(GROUP)).toContain("🎯 <b>Anna · 2026-10-23</b>");
     expect(tg.lastTextTo(GROUP)).toContain("<b>Eraly #8</b> · 640/700");
   });
 
