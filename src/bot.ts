@@ -115,14 +115,21 @@ export async function isDayComplete(ctx: Ctx, day: string, minPlayers = EXPECTED
 type ParsedCommand = { kind: "none" } | { kind: "other-bot" } | { kind: "command"; name: string };
 
 export function parseCommand(text: string, botUsername: string | null): ParsedCommand {
-  const m = /^\/([A-Za-z0-9_]+)(?:@([A-Za-z0-9_]+))?(?:\s|$)/.exec(text);
+  const m = /^([/!])([A-Za-z0-9_-]+)(?:@([A-Za-z0-9_]+))?(?:\s|$)/.exec(text);
   if (!m) return { kind: "none" };
-  if (m[2] && botUsername && m[2].toLowerCase() !== botUsername.toLowerCase()) return { kind: "other-bot" };
-  return { kind: "command", name: m[1]!.toLowerCase() };
+  if (m[3] && botUsername && m[3].toLowerCase() !== botUsername.toLowerCase()) return { kind: "other-bot" };
+  const prefix = m[1];
+  const raw = m[2]!.toLowerCase();
+  const name = raw.replace(/-/g, "_");
+  // !help is the command listing (/komennot), whereas /help is the instructions manual (renderHelp)
+  if (prefix === "!" && raw === "help") {
+    return { kind: "command", name: "komennot" };
+  }
+  return { kind: "command", name };
 }
 
 function parseBangHelp(text: string, botUsername: string | null): "none" | "other-bot" | "match" {
-  const m = /^!(?:help|komennot)(?:@([A-Za-z0-9_]+))?(?:\s|$)/i.exec(text.trim());
+  const m = /^!(?:help|komennot|commands)(?:@([A-Za-z0-9_]+))?(?:\s|$)/i.exec(text.trim());
   if (!m) return "none";
   if (m[1] && botUsername && m[1].toLowerCase() !== botUsername.toLowerCase()) return "other-bot";
   return "match";
@@ -171,7 +178,10 @@ export async function handleUpdate(ctx: Ctx, update: Update): Promise<void> {
     await reply(ctx, msg, renderHelp({ closeTime: ctx.closeTime, timeZone: ctx.timeZone, linked }));
     return;
   }
-  if (bangHelp === "match" || (command.kind === "command" && command.name === "komennot")) {
+  if (
+    bangHelp === "match" ||
+    (command.kind === "command" && (command.name === "komennot" || command.name === "commands"))
+  ) {
     await reply(ctx, msg, renderCommands());
     return;
   }
@@ -559,7 +569,15 @@ async function privateCommand(ctx: Ctx, msg: Message, user: User, name: string, 
       await ballotCommand(ctx, msg, user, settings);
       return;
     case "komennot":
+    case "commands":
       await reply(ctx, msg, renderCommands());
+      return;
+    case "vote_leaderboard":
+    case "vote":
+    case "finalize":
+    case "sulje":
+    case "lopullinen":
+      await reply(ctx, msg, "Äänestykset toimivat vain ryhmässä.");
       return;
     case "setup":
       await reply(ctx, msg, "Send /setup in the group, not here.");
@@ -631,12 +649,15 @@ async function groupCommand(ctx: Ctx, msg: Message, name: string, settings: Sett
       if (msg.from && !msg.sender_chat) await ballotCommand(ctx, msg, msg.from, settings);
       return;
     case "vote_leaderboard":
+    case "vote":
       if (msg.from && !msg.sender_chat) {
         const mode: VoteMode = /\bfinalize\b/i.test(msg.text ?? msg.caption ?? "") ? "finalize" : "interim";
         await startVote(ctx, msg, mode, settings);
       }
       return;
     case "finalize":
+    case "sulje":
+    case "lopullinen":
       if (msg.from && !msg.sender_chat) {
         await startVote(ctx, msg, "finalize", settings);
       }
@@ -645,7 +666,7 @@ async function groupCommand(ctx: Ctx, msg: Message, name: string, settings: Sett
 }
 
 async function detectVoteCommand(ctx: Ctx, msg: Message, text: string, settings: Settings): Promise<VoteMode | null> {
-  const m = /^(?:!vote[-_]leaderboard|\/vote-leaderboard)(?:@([A-Za-z0-9_]+))?(?:\s+(.*))?$/i.exec(text.trim());
+  const m = /^[!/](?:vote[-_]leaderboard|vote)(?:@([A-Za-z0-9_]+))?(?:\s+(.*))?$/i.exec(text.trim());
   if (m) {
     if (m[1] && settings.botUsername && m[1].toLowerCase() !== settings.botUsername.toLowerCase()) return null;
     const arg = m[2] ?? "";
@@ -653,7 +674,7 @@ async function detectVoteCommand(ctx: Ctx, msg: Message, text: string, settings:
   }
 
   const replyMsg = msg.reply_to_message;
-  if (replyMsg && /^!?(?:finalize|sulje|lopullinen)(?:\s|$)/i.test(text.trim())) {
+  if (replyMsg && /^[/!]?(?:finalize|sulje|lopullinen)(?:\s|$)/i.test(text.trim())) {
     const voteState = await getVoteState(ctx.db);
     const isTrackedMessage =
       voteState?.interimMessageIds?.includes(replyMsg.message_id) ||

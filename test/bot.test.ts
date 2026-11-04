@@ -946,6 +946,26 @@ describe("!vote-leaderboard", () => {
     const dayRow = await env.DB.prepare("SELECT finalized_at AS f FROM days WHERE day = '2026-10-23'").first<{ f: string | null }>();
     expect(dayRow?.f).not.toBeNull();
   });
+
+  it("supports '/vote-leaderboard', '/vote_leaderboard', and '/finalize' slash commands", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, eralyShare(8, 640)));
+    tg.clear();
+
+    // /vote-leaderboard starts interim vote
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/vote-leaderboard"));
+    expect(tg.sentTo(GROUP)[0]!.params.text).toContain("Julkaistaanko päivän väliaikatilanne?");
+    tg.clear();
+
+    // /vote_leaderboard finalize starts finalize vote
+    await handleUpdate(makeCtx(tg, FRI_EVENING), inGroup(anna, "/vote_leaderboard finalize"));
+    expect(tg.sentTo(GROUP)[0]!.params.text).toContain("Suljetaanko päivän kisa ja julkaistaan lopulliset tulokset?");
+    tg.clear();
+
+    // /finalize starts finalize vote
+    await handleUpdate(makeCtx(tg, FRI_EVENING), inGroup(anna, "/finalize"));
+    expect(tg.sentTo(GROUP)[0]!.params.text).toContain("Suljetaanko päivän kisa ja julkaistaan lopulliset tulokset?");
+  });
 });
 
 describe("/tulos", () => {

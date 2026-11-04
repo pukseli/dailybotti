@@ -144,14 +144,14 @@ Telegram allows bots to define slash command menus via `setMyCommands`. `dailybo
 
 | Command | Scope | Description |
 |---|---|---|
-| `!help` / `/komennot` | Private & Group | Lists all available commands and their arguments |
+| `/komennot` / `!help` | Private & Group | Lists all available commands and their arguments |
 | `/today` | Private & Group | Show today's live board |
 | `/tulos` (or `/tulokset`) | Private & Group | Show player's game results round-by-round (`[pelaaja] [peli] [eilen \| YYYY-MM-DD \| #nro]`) |
 | `/me` | Private & Group | Show personal stats and medals |
 | `/leaderboard` | Private & Group | All-time rankings and gold medals |
 | `/regressio` | Private & Group | Statistical outlier analysis |
-| `!vote-leaderboard` / `/vote_leaderboard` | Group only | Start 4-vote poll to post interim standings |
-| `!vote-leaderboard finalize` / `/finalize` | Group only | Start 4-vote poll to close the day early and post final podiums |
+| `/vote-leaderboard` / `/vote_leaderboard` / `!vote-leaderboard` | Group only | Start 4-vote poll to post interim standings |
+| `/vote-leaderboard finalize` / `/finalize` / `!vote-leaderboard finalize` | Group only | Start 4-vote poll to close the day early and post final podiums |
 | `/haaste` | Private & Group | Today's imitation challenge and status |
 | `/ehdota` | Private & Group | Suggest a character/person for the imitation draw |
 | `/ehdotukset` | Private & Group | List remaining imitation suggestions |

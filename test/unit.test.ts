@@ -317,8 +317,20 @@ describe("names and commands", () => {
 
   it("parses commands addressed to this bot only", () => {
     expect(parseCommand("/today", "PodiumBot")).toEqual({ kind: "command", name: "today" });
+    expect(parseCommand("!today", "PodiumBot")).toEqual({ kind: "command", name: "today" });
     expect(parseCommand("/Today@podiumbot extra", "PodiumBot")).toEqual({ kind: "command", name: "today" });
     expect(parseCommand("/today@OtherBot", "PodiumBot")).toEqual({ kind: "other-bot" });
+    expect(parseCommand("!today@OtherBot", "PodiumBot")).toEqual({ kind: "other-bot" });
     expect(parseCommand("Eraly #8", "PodiumBot")).toEqual({ kind: "none" });
+    expect(parseCommand("/vote-leaderboard", "PodiumBot")).toEqual({ kind: "command", name: "vote_leaderboard" });
+    expect(parseCommand("!vote-leaderboard", "PodiumBot")).toEqual({ kind: "command", name: "vote_leaderboard" });
+    expect(parseCommand("/vote_leaderboard", "PodiumBot")).toEqual({ kind: "command", name: "vote_leaderboard" });
+    expect(parseCommand("!vote_leaderboard", "PodiumBot")).toEqual({ kind: "command", name: "vote_leaderboard" });
+    expect(parseCommand("/finalize", "PodiumBot")).toEqual({ kind: "command", name: "finalize" });
+    expect(parseCommand("!finalize", "PodiumBot")).toEqual({ kind: "command", name: "finalize" });
+    expect(parseCommand("/help", "PodiumBot")).toEqual({ kind: "command", name: "help" });
+    expect(parseCommand("!help", "PodiumBot")).toEqual({ kind: "command", name: "komennot" });
+    expect(parseCommand("/komennot", "PodiumBot")).toEqual({ kind: "command", name: "komennot" });
+    expect(parseCommand("!komennot", "PodiumBot")).toEqual({ kind: "command", name: "komennot" });
   });
 });
