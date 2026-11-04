@@ -21,6 +21,12 @@ export function rank(entries: { playerId: number; value: number }[]): Standing[]
   return sorted.map((e) => ({ ...e, rank: 1 + sorted.filter((o) => o.value > e.value).length }));
 }
 
+/** Lowest value first. Equal values share a rank and the next rank is skipped (1, 1, 3). */
+export function shameRank(entries: { playerId: number; value: number }[]): Standing[] {
+  const sorted = [...entries].sort((a, b) => a.value - b.value || a.playerId - b.playerId);
+  return sorted.map((e) => ({ ...e, rank: 1 + sorted.filter((o) => o.value < e.value).length }));
+}
+
 /**
  * Overall score: each game as a percentage of its maximum, summed (out of 300). A skipped game counts as 0.
  */

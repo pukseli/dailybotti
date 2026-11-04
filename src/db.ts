@@ -277,3 +277,59 @@ export async function statsForEveryone(db: D1Database): Promise<StatsRow[]> {
     .all<StatsRow>();
   return results;
 }
+
+export interface WorstResultRow {
+  player_id: number;
+  game: GameId;
+  day: string;
+  puzzle: number | null;
+  score: number;
+  max_score: number;
+}
+
+export interface WorstOverallRow {
+  player_id: number;
+  day: string;
+  score: number;
+}
+
+export async function worstResultsByGame(db: D1Database, excludedDays: string[] = []): Promise<WorstResultRow[]> {
+  const whereClause =
+    excludedDays.length > 0 ? `WHERE day NOT IN (${excludedDays.map(() => "?").join(", ")})` : "";
+  const query = `
+    SELECT player_id, game, day, puzzle, score, max_score
+    FROM (
+      SELECT player_id, game, day, puzzle, score, max_score,
+             ROW_NUMBER() OVER (
+               PARTITION BY player_id, game
+               ORDER BY score ASC, day DESC
+             ) as rn
+      FROM results
+      ${whereClause}
+    )
+    WHERE rn = 1
+  `;
+  const stmt = db.prepare(query);
+  const bound = excludedDays.length > 0 ? stmt.bind(...excludedDays) : stmt;
+  const { results } = await bound.all<WorstResultRow>();
+  return results;
+}
+
+export async function worstOverallByPlayer(db: D1Database): Promise<WorstOverallRow[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT player_id, day, value AS score
+       FROM (
+         SELECT player_id, day, value,
+                ROW_NUMBER() OVER (
+                  PARTITION BY player_id
+                  ORDER BY value ASC, day DESC
+                ) as rn
+         FROM placements
+         WHERE category = 'overall'
+       )
+       WHERE rn = 1`,
+    )
+    .all<WorstOverallRow>();
+  return results;
+}

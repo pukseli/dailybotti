@@ -23,6 +23,8 @@ import {
   statsForEveryone,
   statsForPlayer,
   upsertPlayer,
+  worstOverallByPlayer,
+  worstResultsByGame,
   type PlacementRow,
   type ResultRow,
   type Settings,
@@ -61,10 +63,12 @@ import {
   renderLeaderboard,
   renderPlayerDayResults,
   renderPlayerStats,
+  renderPlayerWorstStats,
   renderRegressio,
   renderSummary,
   renderVoteKeyboard,
   renderVoteMessage,
+  renderWorstSummary,
 } from "./render";
 import { dayStandings, overallValue, type DayResult } from "./scoring";
 import {
@@ -445,6 +449,66 @@ async function tulosCommand(ctx: Ctx, msg: Message, caller: User, text: string):
   await reply(ctx, msg, renderPlayerDayResults({ playerName: target.name, day, results: dayResults, gameFilter }));
 }
 
+async function pohjatCommand(ctx: Ctx, msg: Message, caller: User, text: string): Promise<void> {
+  const players = await allPlayers(ctx.db);
+  const names = displayNames(players);
+
+  const rawArg = text.replace(/^\/[a-zA-Z0-9_]+(@[a-zA-Z0-9_]+)?\s*/i, "").trim();
+  let targetPlayerId: number | null = null;
+  let targetPlayerName: string | null = null;
+
+  if (rawArg) {
+    const cleanArg = rawArg.replace(/^@/, "").trim().toLowerCase();
+    const match = players.find(
+      (p) =>
+        (p.username && p.username.toLowerCase() === cleanArg) ||
+        (p.display_name && p.display_name.trim().toLowerCase() === cleanArg) ||
+        p.first_name.toLowerCase() === cleanArg ||
+        (names.get(p.id) && names.get(p.id)!.toLowerCase() === cleanArg),
+    );
+    if (match) {
+      targetPlayerId = match.id;
+      targetPlayerName = names.get(match.id) ?? match.first_name;
+    } else {
+      await reply(
+        ctx,
+        msg,
+        `Pelaajaa "${escapeHtml(rawArg)}" ei löytynyt. Käyttö: <code>/pohjat [pelaaja]</code>`,
+      );
+      return;
+    }
+  }
+
+  const hidden = (await openDays(ctx.db)).filter((day) => !dayIsClosed(ctx, day));
+  const worstResults = await worstResultsByGame(ctx.db, hidden);
+  const worstOverall = await worstOverallByPlayer(ctx.db);
+
+  if (targetPlayerId !== null && targetPlayerName !== null) {
+    const playerResults = worstResults.filter((r) => r.player_id === targetPlayerId);
+    const playerOverall = worstOverall.find((o) => o.player_id === targetPlayerId);
+    await reply(
+      ctx,
+      msg,
+      renderPlayerWorstStats({
+        playerName: targetPlayerName,
+        results: playerResults,
+        overall: playerOverall,
+      }),
+    );
+    return;
+  }
+
+  await reply(
+    ctx,
+    msg,
+    renderWorstSummary({
+      worstResults,
+      worstOverall,
+      names,
+    }),
+  );
+}
+
 async function privateCommand(ctx: Ctx, msg: Message, user: User, name: string, settings: Settings): Promise<void> {
   switch (name) {
     case "today": {
@@ -470,6 +534,12 @@ async function privateCommand(ctx: Ctx, msg: Message, user: User, name: string, 
       return;
     case "leaderboard":
       await reply(ctx, msg, await leaderboardText(ctx));
+      return;
+    case "pohjat":
+    case "pohjanoteeraus":
+    case "jumbo":
+    case "shame":
+      await pohjatCommand(ctx, msg, user, msg.text ?? msg.caption ?? "");
       return;
     case "regressio":
       await regressioAction(ctx, msg, user, msg.text ?? msg.caption ?? "");
@@ -532,6 +602,14 @@ async function groupCommand(ctx: Ctx, msg: Message, name: string, settings: Sett
       return;
     case "leaderboard":
       await reply(ctx, msg, await leaderboardText(ctx));
+      return;
+    case "pohjat":
+    case "pohjanoteeraus":
+    case "jumbo":
+    case "shame":
+      if (msg.from && !msg.sender_chat) {
+        await pohjatCommand(ctx, msg, msg.from, msg.text ?? msg.caption ?? "");
+      }
       return;
     case "regressio":
       if (msg.from && !msg.sender_chat) {

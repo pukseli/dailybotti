@@ -1,9 +1,9 @@
 // Message texts. Everything is sent with parse_mode HTML, so user-provided text goes through escapeHtml.
 
-import type { PlayerRow, ResultRow, StatsRow, VoteState } from "./db";
+import type { PlayerRow, ResultRow, StatsRow, VoteState, WorstOverallRow, WorstResultRow } from "./db";
 import { ERALY_SYMBOL_POINTS, GAMES, KRILLION_SYMBOL_POINTS, gameById, gameTitle, parseRoundData, type GameId } from "./games";
 import type { BlowoutReport, RegressioReport } from "./regressio";
-import { MEDALS, placeMark, type Category, type Standing } from "./scoring";
+import { MEDALS, placeMark, shameRank, type Category, type Standing } from "./scoring";
 import type { InlineKeyboardMarkup } from "./telegram";
 import { dayLabel } from "./time";
 
@@ -201,6 +201,91 @@ export function renderRegressio(report: RegressioReport): string {
 
 function medalCounts(s: Pick<StatsRow, "gold" | "silver" | "bronze">): string {
   return `${MEDALS[0]}${s.gold} ${MEDALS[1]}${s.silver} ${MEDALS[2]}${s.bronze}`;
+}
+
+export const SHAME_MARKS = ["💩", "🪠", "🥔"] as const;
+
+export function shamePlaceMark(rank: number): string {
+  return SHAME_MARKS[rank - 1] ?? `${rank}.`;
+}
+
+export function renderWorstSummary(opts: {
+  worstResults: WorstResultRow[];
+  worstOverall: WorstOverallRow[];
+  names: Map<number, string>;
+}): string {
+  const { worstResults, worstOverall, names } = opts;
+  const lines = [
+    "🪠 <b>POHJANOTEERAUKSET · Hall of Shame</b>",
+    "<i>Kunkin pelaajan synkimmät hetket ja historialliset rimanalitukset</i>",
+  ];
+
+  if (worstResults.length === 0 && worstOverall.length === 0) {
+    lines.push("", "<i>Ei vielä tallennettuja tuloksia suljetuilta päiviltä.</i>");
+    return fit(lines);
+  }
+
+  for (const game of GAMES) {
+    lines.push("", `<b>${escapeHtml(game.name)}</b>`);
+    const gameResults = worstResults.filter((r) => r.game === game.id);
+    if (gameResults.length === 0) {
+      lines.push("<i>Ei tuloksia.</i>");
+      continue;
+    }
+    const standings = shameRank(gameResults.map((r) => ({ playerId: r.player_id, value: r.score })));
+    for (const s of standings) {
+      const r = gameResults.find((x) => x.player_id === s.playerId)!;
+      const puzzleInfo = r.puzzle ? ` #${r.puzzle}` : "";
+      lines.push(`${shamePlaceMark(s.rank)} ${nameOf(names, s.playerId)} · ${r.score}/${r.max_score} (${dayLabel(r.day)}${puzzleInfo})`);
+    }
+  }
+
+  lines.push("", "🥄 <b>Overall (Mustin päivä)</b> (out of 300)");
+  if (worstOverall.length === 0) {
+    lines.push("<i>Ei vielä suljettuja päiviä.</i>");
+  } else {
+    const overallStandings = shameRank(worstOverall.map((o) => ({ playerId: o.player_id, value: o.score })));
+    for (const s of overallStandings) {
+      const o = worstOverall.find((x) => x.player_id === s.playerId)!;
+      lines.push(`${shamePlaceMark(s.rank)} ${nameOf(names, s.playerId)} · ${o.score.toFixed(1)} (${dayLabel(o.day)})`);
+    }
+  }
+
+  return fit(lines);
+}
+
+export function renderPlayerWorstStats(opts: {
+  playerName: string;
+  results: WorstResultRow[];
+  overall?: WorstOverallRow | null;
+}): string {
+  const { playerName, results, overall } = opts;
+  const lines = [
+    `🪠 <b>POHJANOTEERAUKSET · ${escapeHtml(playerName)}</b>`,
+    "<i>Pelaajan synkimmät hetket ja historialliset rimanalitukset</i>",
+  ];
+
+  if (results.length === 0 && !overall) {
+    lines.push("", "<i>Ei vielä tallennettuja tuloksia suljetuilta päiviltä.</i>");
+    return fit(lines);
+  }
+
+  lines.push("");
+  for (const game of GAMES) {
+    const r = results.find((x) => x.game === game.id);
+    if (!r) {
+      lines.push(`<b>${escapeHtml(game.name)}</b>: <i>ei tulosta</i>`);
+    } else {
+      const puzzleInfo = r.puzzle ? ` #${r.puzzle}` : "";
+      lines.push(`<b>${escapeHtml(game.name)}</b>: ${r.score}/${r.max_score} (${dayLabel(r.day)}${puzzleInfo})`);
+    }
+  }
+
+  if (overall) {
+    lines.push("", `🥄 <b>Mustin päivä (Overall)</b>: ${overall.score.toFixed(1)} / 300 (${dayLabel(overall.day)})`);
+  }
+
+  return fit(lines);
 }
 
 export function renderLeaderboard(stats: StatsRow[], names: Map<number, string>): string {
