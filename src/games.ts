@@ -80,12 +80,17 @@ const KRILLION_OTHER = /Krillion[ \t]+[^\s#][^\n#]*#\s*\d+/;
 const KRILLION_BLOCK =
   /Krillion[ \t]+#\s*\d+[^\n]*\n[ \t]*\d+(?![\d.,])(?:\n[ \t]*\n[ \t]*([^\sA-Za-z0-9]+))?(?:\n[ \t]*\n?[ \t]*https?:\/\/krillion\.(?:io|me)\S*)?/;
 
+// Old format:
 // "Size It Up\nOverall Score 437\n\n🟥🟥🟥🟥⬜ 85\n...\nhttps://magnitudle.com/size-it-up"
-// Pop Culture, Geography, Unlimited and Archive have a longer first line and don't match.
-const SIZE_IT_UP = /(?:^|\n)[ \t]*Size It Up[ \t]*\n\s*Overall Score[ \t]*(\d+(?:[.,]\d+)?)/;
-const SIZE_IT_UP_OTHER = /Size It Up[^\n]*\S[^\n]*\n\s*Overall Score/;
+// New format (e.g. desktop clipboard copy):
+// "Magnitudle — Size It Up\n2026-11-04\n\nScore: 437/500\n\n🟥🟥🟥🟥⬜ 85\n...\n\nhttps://magnitudle.com/size-it-up"
+// Pop Culture, Geography, Unlimited and Archive have different titles or suffixes and don't match.
+const SIZE_IT_UP =
+  /(?:^|\n)[ \t]*(?:Magnitudle[ \t]*[—–-][ \t]*)?Size It Up[ \t]*(?:\n[ \t]*\d{4}-\d{2}-\d{2}[ \t]*)?\n\s*(?:Overall Score|Score:?)[ \t]*(\d+(?:[.,]\d+)?)(?:\s*\/\s*500)?(?!\d)/;
+const SIZE_IT_UP_OTHER =
+  /(?:Size It Up[^\n]*\S[^\n]*\n\s*(?:Overall Score|Score:?)|Size It Up[^\n]*\n[ \t]*\d{4}-\d{2}-\d{2}[ \t]*·|Magnitudle[ \t]*[—–-][ \t]*Size It Up[^\n]*\S[^\n]*\n|Size It Up Archive|Size It Up Unlimited)/i;
 const SIZE_IT_UP_BLOCK =
-  /(?:^|\n)[ \t]*(Size It Up[ \t]*\n\s*Overall Score[ \t]*\d+(?:[.,]\d+)?(?:\n[ \t]*\n((?:[ \t]*[🟥⬜]{5}[ \t]+\d+(?:[.,]\d+)?\*?[ \t]*(?:\n|$))+))?(?:\n?[ \t]*\*[^\n]*)?(?:\n?[ \t]*https?:\/\/magnitudle\.com\/size-it-up\S*)?)/u;
+  /(?:^|\n)[ \t]*((?:(?:Magnitudle[ \t]*[—–-][ \t]*)?Size It Up[ \t]*(?:\n[ \t]*\d{4}-\d{2}-\d{2}[ \t]*)?\n\s*(?:Overall Score|Score:?)[ \t]*\d+(?:[.,]\d+)?(?:\s*\/\s*500)?(?!\d))(?:\n[ \t]*\n((?:[ \t]*[🟥⬜]{5}[ \t]+\d+(?:[.,]\d+)?\*?[ \t]*(?:\n|$))+))?(?:\n?[ \t]*\*[^\n]*)?(?:\n?[ \t]*\n?[ \t]*https?:\/\/magnitudle\.com\/size-it-up\S*)?)/u;
 const SIZE_IT_UP_ROUND = /[🟥⬜]{5}[ \t]+(\d+(?:[.,]\d+)?)\*?/gu;
 
 const graphemeSegmenter = new Intl.Segmenter();

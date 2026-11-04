@@ -40,9 +40,53 @@ describe("parseResults", () => {
     expect(parseResults(sizeItUpShare(437)).results).toEqual([{ game: "sizeitup", puzzle: null, score: 437 }]);
   });
 
+  it("reads the new Magnitudle desktop Size It Up share format", () => {
+    const text = [
+      "Magnitudle — Size It Up",
+      "2026-11-04",
+      "",
+      "Score: 461/500",
+      "",
+      "🟥🟥🟥🟥🟥 100",
+      "🟥🟥🟥🟥⬜ 98",
+      "🟥🟥🟥🟥🟥 92",
+      "🟥🟥🟥🟥⬜ 87",
+      "🟥🟥🟥🟥🟥 84",
+      "",
+      "https://magnitudle.com/size-it-up",
+    ].join("\n");
+    expect(parseResults(text).results).toEqual([{ game: "sizeitup", puzzle: null, score: 461 }]);
+    expect(parseRoundData(text, "sizeitup")).toEqual({
+      rounds: [100, 98, 92, 87, 84],
+      rawText: text,
+    });
+  });
+
   it("reads Size It Up with a corrected-round note", () => {
     const text = "Size It Up\nOverall Score 455\n\n🟥🟥🟥🟥🟥 95*\n🟥🟥🟥🟥⬜ 90\n🟥🟥🟥🟥⬜ 90\n🟥🟥🟥🟥⬜ 90\n🟥🟥🟥🟥⬜ 90\n* Round 1 adjusted after an answer correction\nhttps://magnitudle.com/size-it-up";
     expect(parseResults(text).results).toEqual([{ game: "sizeitup", puzzle: null, score: 455 }]);
+
+    const textNew = [
+      "Magnitudle — Size It Up",
+      "2026-11-04",
+      "",
+      "Score: 455/500",
+      "",
+      "🟥🟥🟥🟥🟥 95*",
+      "🟥🟥🟥🟥⬜ 90",
+      "🟥🟥🟥🟥⬜ 90",
+      "🟥🟥🟥🟥⬜ 90",
+      "🟥🟥🟥🟥⬜ 90",
+      "",
+      "* Round 1 adjusted after an answer correction",
+      "",
+      "https://magnitudle.com/size-it-up",
+    ].join("\n");
+    expect(parseResults(textNew).results).toEqual([{ game: "sizeitup", puzzle: null, score: 455 }]);
+    expect(parseRoundData(textNew, "sizeitup")).toEqual({
+      rounds: [95, 90, 90, 90, 90],
+      rawText: textNew,
+    });
   });
 
   it("reads Size It Up when the share sheet repeats the title", () => {
@@ -51,11 +95,23 @@ describe("parseResults", () => {
 
   it("rounds a decimal Size It Up total", () => {
     expect(parseResults("Size It Up\nOverall Score 437.6\n").results[0]?.score).toBe(438);
+    expect(parseResults("Magnitudle — Size It Up\n2026-11-04\n\nScore: 437.6/500\n").results[0]?.score).toBe(438);
   });
 
   it("rejects the other Size It Up modes", () => {
-    for (const label of ["Size It Up: Pop Culture", "Size It Up: Geography", "Size It Up Unlimited", "Size It Up Archive · 2026-10-20"]) {
-      const out = parseResults(sizeItUpShare(400, label));
+    const rejectedCases = [
+      sizeItUpShare(400, "Size It Up: Pop Culture"),
+      sizeItUpShare(400, "Size It Up: Geography"),
+      sizeItUpShare(400, "Size It Up Unlimited"),
+      sizeItUpShare(400, "Size It Up Archive · 2026-10-20"),
+      "Magnitudle — Size It Up: Pop Culture\n2026-11-04\n\nScore: 400/500\n\nhttps://magnitudle.com/size-it-up/pop-culture",
+      "Magnitudle — Size It Up: Geography\n2026-11-04\n\nScore: 400/500\n\nhttps://magnitudle.com/size-it-up/geography",
+      "Magnitudle — Size It Up\n2026-11-04 · Unlimited\n\nScore: 400/500\n\nhttps://magnitudle.com/size-it-up/unlimited",
+      "Magnitudle — Size It Up\n2026-11-04 · Practice\n\nScore: 400/500\n\nhttps://magnitudle.com/size-it-up?date=2026-11-01",
+      "Magnitudle — Size It Up Archive\n2026-11-04 · Practice\n\nScore: 400/500\n\nhttps://magnitudle.com/size-it-up?date=2026-11-01",
+    ];
+    for (const text of rejectedCases) {
+      const out = parseResults(text);
       expect(out.results).toEqual([]);
       expect(out.rejected[0]).toContain("Only the regular daily Size It Up counts");
     }

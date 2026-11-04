@@ -146,20 +146,33 @@ All parsing logic lives in [`src/games.ts`](file:///c:/Users/akseli/git/dailybot
 ### 3. Size It Up (`sizeitup`)
 - **Max Score:** 500 (5 rounds, 0–100 each).
 - **Puzzle Numbering:** **None**. Tied to local paste date (`today`).
-- **Share Format:**
+- **Share Formats:**
+  *New format (e.g. desktop clipboard copy):*
   ```text
-  Size It Up
-  Overall Score 461
+  Magnitudle — Size It Up
+  2026-11-04
+
+  Score: 461/500
 
   🟥🟥🟥🟥🟥 100
   🟥🟥🟥🟥⬜ 98*
   🟥🟥🟥🟥🟥 92
   🟥🟥🟥🟥⬜ 87
   🟥🟥🟥🟥🟥 84
+
   https://magnitudle.com/size-it-up
   ```
-- **Regex:** `(?:^|\n)[ \t]*Size It Up[ \t]*\n\s*Overall Score[ \t]*(\d+(?:[.,]\d+)?)`
-- **Rejections:** Pop Culture, Geography, Unlimited, Archive modes are rejected.
+  *Legacy format:*
+  ```text
+  Size It Up
+  Overall Score 461
+
+  🟥🟥🟥🟥🟥 100
+  ...
+  https://magnitudle.com/size-it-up
+  ```
+- **Regex:** `(?:^|\n)[ \t]*(?:Magnitudle[ \t]*[—–-][ \t]*)?Size It Up[ \t]*(?:\n[ \t]*\d{4}-\d{2}-\d{2}[ \t]*)?\n\s*(?:Overall Score|Score:?)[ \t]*(\d+(?:[.,]\d+)?)(?:\s*\/\s*500)?(?!\d)`
+- **Rejections:** Pop Culture, Geography, Unlimited, Practice, Archive modes are rejected.
 - **Round Breakdown:** Extracted per-round scores `[🟥⬜]{5} \d+` into JSON array.
 
 ---
