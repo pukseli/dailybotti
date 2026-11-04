@@ -95,6 +95,79 @@ export function renderBoard(opts: {
   return fit(lines);
 }
 
+export interface NewWorstScoreAlert {
+  playerId: number;
+  playerName: string;
+  records: {
+    game: GameId;
+    gameName: string;
+    score: number;
+    maxScore: number;
+    prevMinScore: number;
+  }[];
+}
+
+export type WorstAlertTemplate = (
+  name: string,
+  gameStr: string,
+  isPlural: boolean,
+  details: string,
+  hasKrillion: boolean,
+) => string[];
+
+export const WORST_ALERT_TEMPLATES: WorstAlertTemplate[] = [
+  // Tyyli A: Sarkastisen juhlallinen onnittelu
+  (name, gameStr, isPlural) => [
+    "🪠 <b>UUSI POHJANOTEERAUS!</b>",
+    `Onnittelut ${escapeHtml(name)} uudesta pohjanoteerauksesta! Tuloksesi ${gameStr} ${isPlural ? "olivat elämäsi huonoimmat" : "oli elämäsi huonoin"}.`,
+  ],
+  // Tyyli B: Urheiluselostus & aiempi pohja
+  (name, gameStr, _isPlural, details) => [
+    "📉 <b>POHJANOTEERAUS-HÄLYTYS:</b>",
+    `Uusi ennätys pohjamudissa! ${escapeHtml(name)} alitti aiemman rimansa ${gameStr} (${details}).`,
+  ],
+  // Tyyli C: Häpeäpaalu & Paskapysti
+  (name, gameStr) => [
+    "💩 <b>HENKILÖKOHTAINEN POHJAKOSKETUS:</b>",
+    `Lämpimät onnittelut ${escapeHtml(name)}! Päivän suoritus ${gameStr} kirjataan virallisesti pelaajahistoriasi synkimmäksi hetkeksi.`,
+  ],
+  // Tyyli D: Kaveriporukan kuittailu / Sukellus-teema huomioiden Krillion
+  (name, gameStr, _isPlural, _details, hasKrillion) => [
+    hasKrillion ? "🤿 <b>SUKELLUS TYSSÄSI PINNAN ALLE:</b>" : "🤿 <b>RIMANALITUS:</b>",
+    hasKrillion
+      ? `Krillionissa piti sukeltaa syvälle valtamereen, mutta ${escapeHtml(name)} jäi räpylät pystyssä pintavesiin kellumaan! Tulos ${gameStr} on virallisesti uusi henkilökohtainen pohjanoteeraus.`
+      : `${escapeHtml(name)} teki sen taas – mutta väärään suuntaan! Tulos ${gameStr} on virallisesti uusi henkilökohtainen pohjakosketus.`,
+  ],
+];
+
+export function formatWorstAlert(alert: NewWorstScoreAlert, templateIndex?: number): string[] {
+  const { playerName, records } = alert;
+  if (records.length === 0) return [];
+  const isPlural = records.length > 1;
+  const hasKrillion = records.some((r) => r.game === "krillion");
+
+  let gameStr: string;
+  let details: string;
+
+  if (!isPlural) {
+    const r = records[0]!;
+    gameStr = `pelissä ${escapeHtml(r.gameName)} (${r.score}/${r.maxScore})`;
+    details = `aiempi pohja: ${r.prevMinScore}/${r.maxScore}`;
+  } else {
+    const parts = records.map((r) => `${escapeHtml(r.gameName)} (${r.score}/${r.maxScore})`);
+    gameStr = `peleissä ${parts.slice(0, -1).join(", ")} ja ${parts[parts.length - 1]}`;
+    details = `aiemmat pohjat: ` + records.map((r) => `${escapeHtml(r.gameName)} ${r.prevMinScore}/${r.maxScore}`).join(", ");
+  }
+
+  const idx =
+    templateIndex !== undefined && templateIndex >= 0 && templateIndex < WORST_ALERT_TEMPLATES.length
+      ? templateIndex
+      : Math.floor(Math.random() * WORST_ALERT_TEMPLATES.length);
+
+  const tpl = WORST_ALERT_TEMPLATES[idx]!;
+  return tpl(playerName, gameStr, isPlural, details, hasKrillion);
+}
+
 export function renderSummary(opts: {
   day: string;
   standings: Map<Category, Standing[]>;
@@ -102,8 +175,10 @@ export function renderSummary(opts: {
   names: Map<number, string>;
   blowoutReport?: BlowoutReport | null;
   interim?: boolean;
+  newWorstAlerts?: NewWorstScoreAlert[];
+  alertTemplateIndex?: number;
 }): string {
-  const { day, standings, results, names, blowoutReport, interim } = opts;
+  const { day, standings, results, names, blowoutReport, interim, newWorstAlerts, alertTemplateIndex } = opts;
   const lines = [interim ? `⏱️ <b>Väliaikatilanne · ${dayLabel(day)}</b>` : `🏁 <b>Results · ${dayLabel(day)}</b>`];
   for (const game of GAMES) {
     lines.push("", `<b>${escapeHtml(gameTitle(game, day))}</b>`);
@@ -126,6 +201,11 @@ export function renderSummary(opts: {
       `Karsimalla päivän kovin suonenveto regressoitu tulos on ${blowoutReport.regressedScore.toFixed(1)} pistettä.`,
       `<i>"${escapeHtml(blowoutReport.explanation)}"</i>`,
     );
+  }
+  if (newWorstAlerts && newWorstAlerts.length > 0) {
+    for (const alert of newWorstAlerts) {
+      lines.push("", ...formatWorstAlert(alert, alertTemplateIndex));
+    }
   }
   if (interim) {
     lines.push(

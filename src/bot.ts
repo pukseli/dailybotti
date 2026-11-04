@@ -13,6 +13,7 @@ import {
   latestDayWithResults,
   markFinalized,
   openDays,
+  previousMinScoresBeforeDay,
   releaseFinalize,
   resultsForDay,
   savePlacements,
@@ -69,6 +70,7 @@ import {
   renderVoteKeyboard,
   renderVoteMessage,
   renderWorstSummary,
+  type NewWorstScoreAlert,
 } from "./render";
 import { dayStandings, overallValue, type DayResult } from "./scoring";
 import {
@@ -1181,7 +1183,38 @@ Regressoidut pisteet: ${regressedScore.toFixed(1)} / ${maxTotal}`;
     };
   }
 
-  await sendToGroup(ctx, settings, renderSummary({ day, standings, results, names, blowoutReport }));
+  const playerIds = [...new Set(results.map((r) => r.player_id))];
+  const prevMins = await previousMinScoresBeforeDay(ctx.db, day, playerIds);
+
+  const newWorstAlerts: NewWorstScoreAlert[] = [];
+  for (const playerId of playerIds) {
+    const playerResults = results.filter((r) => r.player_id === playerId);
+    const records: NewWorstScoreAlert["records"] = [];
+
+    for (const pr of playerResults) {
+      const prev = prevMins.find((p) => p.player_id === playerId && p.game === pr.game);
+      if (prev && pr.score < prev.min_score) {
+        const game = gameById(pr.game);
+        records.push({
+          game: pr.game,
+          gameName: game?.name ?? pr.game,
+          score: pr.score,
+          maxScore: pr.max_score,
+          prevMinScore: prev.min_score,
+        });
+      }
+    }
+
+    if (records.length > 0) {
+      newWorstAlerts.push({
+        playerId,
+        playerName: names.get(playerId) ?? `Player ${playerId}`,
+        records,
+      });
+    }
+  }
+
+  await sendToGroup(ctx, settings, renderSummary({ day, standings, results, names, blowoutReport, newWorstAlerts }));
   await markFinalized(ctx.db, day, ctx.now.toISOString());
   await refreshBoardSafely(ctx, settings, [day]); // flip the board to "closed"
 }

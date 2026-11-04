@@ -333,3 +333,26 @@ export async function worstOverallByPlayer(db: D1Database): Promise<WorstOverall
     .all<WorstOverallRow>();
   return results;
 }
+
+export interface PreviousGameMin {
+  player_id: number;
+  game: GameId;
+  min_score: number;
+}
+
+export async function previousMinScoresBeforeDay(
+  db: D1Database,
+  day: string,
+  playerIds: number[],
+): Promise<PreviousGameMin[]> {
+  if (playerIds.length === 0) return [];
+  const placeholders = playerIds.map(() => "?").join(", ");
+  const query = `
+    SELECT player_id, game, MIN(score) AS min_score
+    FROM results
+    WHERE day < ? AND player_id IN (${placeholders})
+    GROUP BY player_id, game
+  `;
+  const { results } = await db.prepare(query).bind(day, ...playerIds).all<PreviousGameMin>();
+  return results;
+}

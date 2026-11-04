@@ -1,8 +1,8 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { handleUpdate } from "../src/bot";
-import { insertResult, savePlacements, worstOverallByPlayer, worstResultsByGame } from "../src/db";
-import { renderPlayerWorstStats, renderWorstSummary, shamePlaceMark } from "../src/render";
+import { ensureDay, getSettings, insertResult, previousMinScoresBeforeDay, savePlacements, worstOverallByPlayer, worstResultsByGame } from "../src/db";
+import { formatWorstAlert, renderPlayerWorstStats, renderWorstSummary, shamePlaceMark } from "../src/render";
 import { shameRank } from "../src/scoring";
 import {
   BOT_USERNAME,
@@ -207,5 +207,155 @@ describe("/pohjat bot command", () => {
     // Since today is not finalized and not closed yet, 2026-10-23 result should not be leaked
     expect(text).not.toContain("0/700");
     expect(text).toContain("Ei vielä tallennettuja tuloksia suljetuilta päiviltä.");
+  });
+});
+
+describe("new worst personal score alerts", () => {
+  let tg: FakeTelegram;
+
+  beforeEach(async () => {
+    await resetDb();
+    tg = new FakeTelegram();
+    await env.DB.prepare(
+      "INSERT INTO settings (key, value) VALUES ('group_chat_id', ?), ('bot_username', ?), ('bot_id', '999')",
+    )
+      .bind(GROUP, BOT_USERNAME)
+      .run();
+  });
+
+  it("formatWorstAlert formats all styles correctly and handles Krillion specifically", () => {
+    const singleEraly = {
+      playerId: anna.id,
+      playerName: "Anna",
+      records: [{ game: "eraly" as const, gameName: "Eraly", score: 110, maxScore: 700, prevMinScore: 190 }],
+    };
+
+    // Style A: Sarkastisen juhlallinen
+    const outA = formatWorstAlert(singleEraly, 0);
+    expect(outA[0]).toBe("🪠 <b>UUSI POHJANOTEERAUS!</b>");
+    expect(outA[1]).toBe("Onnittelut Anna uudesta pohjanoteerauksesta! Tuloksesi pelissä Eraly (110/700) oli elämäsi huonoin.");
+
+    // Style B: Urheiluselostus & aiempi pohja
+    const outB = formatWorstAlert(singleEraly, 1);
+    expect(outB[0]).toBe("📉 <b>POHJANOTEERAUS-HÄLYTYS:</b>");
+    expect(outB[1]).toBe("Uusi ennätys pohjamudissa! Anna alitti aiemman rimansa pelissä Eraly (110/700) (aiempi pohja: 190/700).");
+
+    // Style C: Häpeäpaalu & Paskapysti
+    const outC = formatWorstAlert(singleEraly, 2);
+    expect(outC[0]).toBe("💩 <b>HENKILÖKOHTAINEN POHJAKOSKETUS:</b>");
+    expect(outC[1]).toBe("Lämpimät onnittelut Anna! Päivän suoritus pelissä Eraly (110/700) kirjataan virallisesti pelaajahistoriasi synkimmäksi hetkeksi.");
+
+    // Style D without Krillion: RIMANALITUS
+    const outD = formatWorstAlert(singleEraly, 3);
+    expect(outD[0]).toBe("🤿 <b>RIMANALITUS:</b>");
+    expect(outD[1]).toContain("Anna teki sen taas – mutta väärään suuntaan!");
+
+    // Style D with Krillion: Sukellus tyssäsi koska Krillionissa yritetään sukeltaa syvälle!
+    const krillionAlert = {
+      playerId: ben.id,
+      playerName: "Ben",
+      records: [{ game: "krillion" as const, gameName: "Krillion", score: 0, maxScore: 700, prevMinScore: 30 }],
+    };
+    const outDKrillion = formatWorstAlert(krillionAlert, 3);
+    expect(outDKrillion[0]).toBe("🤿 <b>SUKELLUS TYSSÄSI PINNAN ALLE:</b>");
+    expect(outDKrillion[1]).toContain("Krillionissa piti sukeltaa syvälle valtamereen, mutta Ben jäi räpylät pystyssä pintavesiin kellumaan!");
+
+    // Multiple games in Style A
+    const multiAlert = {
+      playerId: anna.id,
+      playerName: "Anna",
+      records: [
+        { game: "eraly" as const, gameName: "Eraly", score: 10, maxScore: 700, prevMinScore: 190 },
+        { game: "krillion" as const, gameName: "Krillion", score: 0, maxScore: 700, prevMinScore: 50 },
+      ],
+    };
+    const outMulti = formatWorstAlert(multiAlert, 0);
+    expect(outMulti[1]).toBe("Onnittelut Anna uudesta pohjanoteerauksesta! Tuloksesi peleissä Eraly (10/700) ja Krillion (0/700) olivat elämäsi huonoimmat.");
+  });
+
+  it("previousMinScoresBeforeDay returns correct minimum scores before day", async () => {
+    await env.DB.prepare(
+      "INSERT INTO players (id, first_name, username, created_at) VALUES (?, 'Anna', 'anna', '2026-10-01')",
+    )
+      .bind(anna.id)
+      .run();
+
+    await insertResult(env.DB, {
+      player_id: anna.id,
+      game: "eraly",
+      day: "2026-10-20",
+      puzzle: 5,
+      score: 300,
+      max_score: 700,
+      submitted_at: "2026-10-20T10:00:00Z",
+    });
+    await insertResult(env.DB, {
+      player_id: anna.id,
+      game: "eraly",
+      day: "2026-10-21",
+      puzzle: 6,
+      score: 150,
+      max_score: 700,
+      submitted_at: "2026-10-21T10:00:00Z",
+    });
+
+    const mins = await previousMinScoresBeforeDay(env.DB, "2026-10-22", [anna.id]);
+    expect(mins).toEqual([{ player_id: anna.id, game: "eraly", min_score: 150 }]);
+  });
+
+  it("finalizeDay alerts when a player records a new personal worst score", async () => {
+    // Setup players
+    await env.DB.prepare(
+      "INSERT INTO players (id, first_name, username, created_at) VALUES (?, 'Anna', 'anna', '2026-10-01'), (?, 'Ben', 'ben', '2026-10-01')",
+    )
+      .bind(anna.id, ben.id)
+      .run();
+
+    // Past results on 2026-10-20
+    await insertResult(env.DB, {
+      player_id: anna.id,
+      game: "eraly",
+      day: "2026-10-20",
+      puzzle: 5,
+      score: 200,
+      max_score: 700,
+      submitted_at: "2026-10-20T10:00:00Z",
+    });
+
+    // Today results on 2026-10-23: Anna scores 50 (new personal worst! 50 < 200)
+    await insertResult(env.DB, {
+      player_id: anna.id,
+      game: "eraly",
+      day: "2026-10-23",
+      puzzle: 8,
+      score: 50,
+      max_score: 700,
+      submitted_at: "2026-10-23T10:00:00Z",
+    });
+    // Ben plays for the first time: scores 100 (first time, so NOT a new personal worst alert)
+    await insertResult(env.DB, {
+      player_id: ben.id,
+      game: "eraly",
+      day: "2026-10-23",
+      puzzle: 8,
+      score: 100,
+      max_score: 700,
+      submitted_at: "2026-10-23T10:00:00Z",
+    });
+
+    await ensureDay(env.DB, "2026-10-23");
+
+    const settings = await getSettings(env.DB);
+    const { finalizeDay } = await import("../src/bot");
+    await finalizeDay(makeCtx(tg, "2026-10-23T21:05:00Z"), settings, "2026-10-23");
+
+    const text = tg.lastTextTo(GROUP);
+    expect(text).toContain("🏁 <b>Results · Fri 23 Oct</b>");
+    // Anna gets a new worst score alert
+    expect(text).toMatch(/(POHJANOTEERAUS|POHJAKOSKETUS|RIMANALITUS)/);
+    expect(text).toContain("Anna");
+    expect(text).toContain("50/700");
+    // Ben did not have past results so no alert for Ben
+    expect(text).not.toContain("Onnittelut Ben");
   });
 });
