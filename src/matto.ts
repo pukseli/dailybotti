@@ -41,12 +41,13 @@ export function canSkip(kept: number, remainingIncludingCurrent: number, target 
 }
 
 /** Build a 10-card deal: 5 strong + 5 weak, then shuffle. */
-export function buildDeal<T>(strong: readonly T[], weak: readonly T[], rand: () => number = Math.random): T[] {
+export function buildDeal<S, W>(strong: readonly S[], weak: readonly W[], rand: () => number = Math.random): (S | W)[] {
   if (strong.length < STRONG_PER_DEAL || weak.length < WEAK_PER_DEAL) {
     throw new Error("Not enough characters to deal");
   }
-  const pick = (pool: readonly T[], n: number) => shuffled(pool, rand).slice(0, n);
-  return shuffled([...pick(strong, STRONG_PER_DEAL), ...pick(weak, WEAK_PER_DEAL)], rand);
+  const pickStrong = shuffled(strong, rand).slice(0, STRONG_PER_DEAL);
+  const pickWeak = shuffled(weak, rand).slice(0, WEAK_PER_DEAL);
+  return shuffled([...pickStrong, ...pickWeak], rand);
 }
 
 /** Every unordered pair as matchups, in shuffled order. */
@@ -54,8 +55,8 @@ export function buildMatchups(playerIds: readonly number[], rand: () => number =
   const pairs: { teamA: number; teamB: number }[] = [];
   for (let i = 0; i < playerIds.length; i++) {
     for (let j = i + 1; j < playerIds.length; j++) {
-      const [a, b] = shuffled([playerIds[i]!, playerIds[j]!], rand);
-      pairs.push({ teamA: a, teamB: b });
+      const pair = shuffled([playerIds[i]!, playerIds[j]!], rand);
+      pairs.push({ teamA: pair[0]!, teamB: pair[1]! });
     }
   }
   return shuffled(pairs, rand);

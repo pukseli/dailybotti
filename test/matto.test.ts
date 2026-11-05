@@ -112,8 +112,9 @@ describe("matto pure helpers", () => {
   });
 
   it("deals five strong and five weak then shuffles", () => {
-    const strong = Array.from({ length: 20 }, (_, i) => ({ id: i, strength: "strong" as const }));
-    const weak = Array.from({ length: 20 }, (_, i) => ({ id: 100 + i, strength: "weak" as const }));
+    type Card = { id: number; strength: "strong" | "weak" };
+    const strong: Card[] = Array.from({ length: 20 }, (_, i) => ({ id: i, strength: "strong" }));
+    const weak: Card[] = Array.from({ length: 20 }, (_, i) => ({ id: 100 + i, strength: "weak" }));
     const deal = buildDeal(strong, weak, seq(42));
     expect(deal).toHaveLength(10);
     expect(deal.filter((c) => c.strength === "strong")).toHaveLength(5);
