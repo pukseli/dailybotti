@@ -391,6 +391,11 @@ export function renderLeaderboard(stats: StatsRow[], names: Map<number, string>)
     .sort((a, b) => b.gold - a.gold || b.silver - a.silver)
     .map((s) => `${nameOf(names, s.player_id)} ${s.gold}`);
   if (stats.some((s) => s.category === "imitation")) lines.push(`🎭 Imitaatio: ${imitators.length ? imitators.join(" · ") : "–"}`);
+  const mattoWinners = stats
+    .filter((s) => s.category === "matto" && s.gold > 0)
+    .sort((a, b) => b.gold - a.gold || b.silver - a.silver)
+    .map((s) => `${nameOf(names, s.player_id)} ${s.gold}`);
+  if (stats.some((s) => s.category === "matto")) lines.push(`⚔️ Daily Mättö: ${mattoWinners.length ? mattoWinners.join(" · ") : "–"}`);
   return fit(lines);
 }
 
@@ -414,6 +419,12 @@ export function renderPlayerStats(name: string, stats: StatsRow[]): string {
   if (imitation) {
     lines.push(
       `<b>🎭 Imitaatio</b>: ${medalCounts(imitation)} · avg ${Math.round(imitation.average)} % · best ${Math.round(imitation.best)} % · ${imitation.played} played`,
+    );
+  }
+  const matto = stats.find((x) => x.category === "matto");
+  if (matto) {
+    lines.push(
+      `<b>⚔️ Daily Mättö</b>: ${medalCounts(matto)} · avg ${Math.round(matto.average)} % · best ${Math.round(matto.best)} % · ${matto.played} played`,
     );
   }
   return lines.join("\n");
@@ -557,6 +568,11 @@ export function renderCommands(): string {
     "• <code>/ehdotukset</code> – Listaa arvonnassa jäljellä olevat imitaatioehdotukset",
     "• <code>/aanesta</code> – Pyydä uusi äänestyslippu yksityisviestinä äänestyksen ollessa käynnissä",
     "",
+    "<b>⚔️ Daily Mättö</b>",
+    "• <code>/matto</code> – Käynnistä peli ryhmässä, tai pyydä draft/äänestyslippu yksityisesti",
+    "• <code>/mattotilanne</code> – Draftin tai äänestyksen tilanne (tai tulokset)",
+    "• <code>/mattoaanesta</code> – Pyydä uusi mättö-äänestyslippu yksityisesti",
+    "",
     "<b>Asetukset ja ohjeet</b>",
     "• <code>/name Uusi nimi</code> (tai <code>/nimi</code>) – Vaihda nimesi tauluun, palkintopalleille ja tilastoihin (<code>/name reset</code> palauttaa Telegram-nimen)",
     "• <code>/komennot</code> (tai <code>!help</code>, <code>/commands</code>) – Tämä komentolistaus",
@@ -570,7 +586,7 @@ export function renderCommands(): string {
 export function renderHelp(opts: { closeTime: string; timeZone: string; linked: boolean }): string {
   const closes = opts.closeTime === "00:00" ? "keskiyöllä" : `klo ${opts.closeTime}`;
   const lines = [
-    "👋 Kerään <b>Eralyn</b>, <b>Krillionin</b> ja <b>Size It Upin</b> päivän tulokset ja julkaisen palkintopallit joka päivä.",
+    "👋 Kerään <b>Eralyn</b>, <b>Krillionin</b> ja <b>Size It Upin</b> päivän tulokset ja julkaisen palkintopallit joka päivä. Lisäksi viikon <b>Daily Mättö</b> (joukkuedraft + anonyymi äänestys).",
     "",
     "<b>Näin pelaat mukana</b>",
     "1. Pelaa päivän pelit: eraly.io, krillion.io ja magnitudle.com/size-it-up",
@@ -578,12 +594,14 @@ export function renderHelp(opts: { closeTime: string; timeZone: string; linked: 
     "3. Jos et halua näyttää pisteitäsi ennen palkintojenjakoa, lähetä tulos minulle yksityisviestillä. Avaa minut ja paina ensin <b>Start</b>.",
     "4. Kaikki kolme tulosta voi lähettää samassa viestissä.",
     `5. Ryhmän taulusta näkee, kuka on jo pelannut. Palkintopallit julkaistaan ${closes} (${escapeHtml(opts.timeZone)}).`,
+    "6. Daily Mättö: käynnistä ryhmässä <code>/matto</code> (tai odota viikon satunnaista päivää). Draft ja äänestys yksityisviesteissä.",
     "",
     "<b>Säännöt</b>",
     "• Vain päivän pelit lasketaan, eivät Unlimited-, arkisto- tai teemapelit eivätkä Size It Upin Pop Culture tai Geography.",
     "• Vain ensimmäinen tulos kustakin pelistä lasketaan.",
     "• Size It Upin tuloksessa ei ole pelinumeroa, joten se lasketaan sille päivälle, jona lähetät sen.",
     "• Kokonaispisteet: jokainen peli prosentteina maksimistaan, yhteensä enintään 300. Pelaamatta jäänyt peli on 0.",
+    "• Daily Mättö -sijoitukset näkyvät leaderboardilla, mutta eivät vaikuta päivän overall-pisteisiin.",
     "",
     "<b>Komennot</b>",
     "/komennot (tai !help) – luettelee kaikki käytössä olevat komennot",

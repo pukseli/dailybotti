@@ -46,6 +46,13 @@ import {
   suggestCommand,
   suggestionsCommand,
 } from "./imitation";
+import {
+  challengeMattoCommand,
+  handleMattoTap,
+  mattoBallotCommand,
+  mattoCommand,
+  mattoTick,
+} from "./matto";
 import { GAMES, dayForResult, gameById, matchGameArg, parseResults, parseRoundData, type GameId, type ParsedResult } from "./games";
 import {
   calculateRegression,
@@ -138,8 +145,13 @@ function parseBangHelp(text: string, botUsername: string | null): "none" | "othe
 export async function handleUpdate(ctx: Ctx, update: Update): Promise<void> {
   if (update.callback_query) {
     const settings = await getSettings(ctx.db);
-    if (update.callback_query.data?.startsWith("vote:")) {
+    const data = update.callback_query.data ?? "";
+    if (data.startsWith("vote:")) {
       await handleCallbackQuery(ctx, update.callback_query, settings);
+      return;
+    }
+    if (data.startsWith("m")) {
+      await handleMattoTap(ctx, settings, update.callback_query);
       return;
     }
     await handleVoteTap(ctx, settings, update.callback_query);
@@ -568,6 +580,16 @@ async function privateCommand(ctx: Ctx, msg: Message, user: User, name: string, 
     case "aanesta":
       await ballotCommand(ctx, msg, user, settings);
       return;
+    case "matto":
+    case "maetto":
+      await mattoCommand(ctx, msg, user, settings);
+      return;
+    case "mattoaanesta":
+      await mattoBallotCommand(ctx, msg, user, settings);
+      return;
+    case "mattotilanne":
+      await challengeMattoCommand(ctx, msg);
+      return;
     case "komennot":
     case "commands":
       await reply(ctx, msg, renderCommands());
@@ -647,6 +669,16 @@ async function groupCommand(ctx: Ctx, msg: Message, name: string, settings: Sett
       return;
     case "aanesta":
       if (msg.from && !msg.sender_chat) await ballotCommand(ctx, msg, msg.from, settings);
+      return;
+    case "matto":
+    case "maetto":
+      if (msg.from && !msg.sender_chat) await mattoCommand(ctx, msg, msg.from, settings);
+      return;
+    case "mattoaanesta":
+      if (msg.from && !msg.sender_chat) await mattoBallotCommand(ctx, msg, msg.from, settings);
+      return;
+    case "mattotilanne":
+      await challengeMattoCommand(ctx, msg);
       return;
     case "vote_leaderboard":
     case "vote":
@@ -1257,6 +1289,12 @@ export async function tick(ctx: Ctx): Promise<void> {
     await imitationTick(ctx, settings);
   } catch (err) {
     console.error("imitation contest step failed", err); // tried again next minute
+  }
+
+  try {
+    await mattoTick(ctx, settings);
+  } catch (err) {
+    console.error("matto contest step failed", err);
   }
 
   try {

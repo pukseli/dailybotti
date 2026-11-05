@@ -15,6 +15,9 @@ export const PRIVATE_COMMANDS = [
   { command: "aanesta", description: "Imitaatioäänestyksen äänestyslippu" },
   { command: "ehdota", description: "Ehdota hahmoa imitoitavaksi" },
   { command: "ehdotukset", description: "Imitaatioehdotukset" },
+  { command: "matto", description: "Daily Mättö – draft / äänestyslippu" },
+  { command: "mattoaanesta", description: "Daily Mättö -äänestyslippu" },
+  { command: "mattotilanne", description: "Daily Mättö -tilanne" },
   { command: "komennot", description: "Kaikki käytössä olevat komennot" },
   { command: "help", description: "Käyttö- ja käyttöönotto-ohjeet" },
 ];
@@ -30,6 +33,8 @@ export const GROUP_COMMANDS = [
   { command: "haaste", description: "Viikon imitaatiohaaste ja tilanne" },
   { command: "ehdota", description: "Ehdota hahmoa imitoitavaksi" },
   { command: "ehdotukset", description: "Imitaatioehdotukset" },
+  { command: "matto", description: "Käynnistä Daily Mättö" },
+  { command: "mattotilanne", description: "Daily Mättö -tilanne" },
   { command: "vote_leaderboard", description: "Äänestys väliaikatilanteen julkaisusta" },
   { command: "finalize", description: "Äänestys päivän kisan sulkemisesta" },
   { command: "komennot", description: "Kaikki käytössä olevat komennot" },

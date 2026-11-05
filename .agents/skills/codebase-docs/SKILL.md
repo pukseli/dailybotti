@@ -13,6 +13,10 @@ description: >-
 2. **Krillion** (`krillion`) — Daily marine dive (max 700 pts).
 3. **Size It Up** (`sizeitup`) — Magnitude comparison across 5 rounds (max 500 pts).
 
+Standalone contests (not part of daily overall / 300):
+4. **Imitaatio** — weekly voice-imitation vote (`src/imitation.ts`).
+5. **Daily Mättö** — character draft + anonymous round-robin under a hidden theme (`src/matto.ts`); start with `/matto` or on a random weekday.
+
 The bot operates on a push-trigger model: players paste share text directly into the group or send it privately. A daily live board is edited in-place (`📋 Fri 23 Oct · today's board`), and podiums (`🏁 Results`) are posted when the day closes at `CLOSE_TIME` (default midnight) or automatically once all registered players finish all games.
 
 ---
@@ -97,6 +101,8 @@ flowchart TD
 | [`src/db.ts`](file:///c:/Users/akseli/git/dailybotti/src/db.ts) | D1 SQLite queries and schema wrappers (settings, players, results, days, placements). | `getSettings`, `setSetting`, `upsertPlayer`, `allPlayers`, `insertResult`, `resultsForDay`, `getDay`, `saveBoard`, `savePlacements` |
 | [`src/scoring.ts`](file:///c:/Users/akseli/git/dailybotti/src/scoring.ts) | Standings ranking algorithm (shared ranks 1-1-3), overall percentage sum (out of 300), and medals. | `rank`, `overallValue`, `dayStandings`, `placeMark`, `MEDALS` |
 | [`src/regressio.ts`](file:///c:/Users/akseli/git/dailybotti/src/regressio.ts) | Statistical outlier removal (top 20%), blowout check (>20% win margin), Workers AI LLM prompts, and Finnish sports/esports fallbacks. | `calculateRegression`, `checkBlowout`, `generateExplanation`, `parseExplanation`, `FALLBACK_ITEMS`, `SYSTEM_PROMPT` |
+| [`src/imitation.ts`](file:///c:/Users/akseli/git/dailybotti/src/imitation.ts) | Weekly voice imitation contest: draw, recordings, private ballots, placements. | `imitationTick`, `handleRecording`, `handleVoteTap`, `suggestCommand` |
+| [`src/matto.ts`](file:///c:/Users/akseli/git/dailybotti/src/matto.ts) | Daily Mättö: draft 5/10, anonymous round-robin, hidden theme, `matto` placements (not overall). | `mattoTick`, `startMatto`, `handleMattoTap`, `mattoCommand` |
 | [`src/render.ts`](file:///c:/Users/akseli/git/dailybotti/src/render.ts) | Telegram HTML message renderers; escapes input, fits messages under 4000 chars, resolves duplicate names. | `renderBoard`, `renderSummary`, `renderLeaderboard`, `renderPlayerStats`, `renderRegressio`, `renderHelp`, `displayNames` |
 | [`src/commands.ts`](file:///c:/Users/akseli/git/dailybotti/src/commands.ts) | Command menu lists for private chats and groups; synchronizes with Telegram `setMyCommands`. | `PRIVATE_COMMANDS`, `GROUP_COMMANDS`, `syncCommandMenus` |
 | [`src/telegram.ts`](file:///c:/Users/akseli/git/dailybotti/src/telegram.ts) | Minimal Telegram Bot API fetch client; handles errors, supergroup migration, and message edit edge cases. | `createTelegram`, `TelegramError`, `isNotModified`, `isMessageGone` |

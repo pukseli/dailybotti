@@ -13,7 +13,7 @@ export interface Standing {
   rank: number;
 }
 
-export type Category = GameId | "imitation" | "overall";
+export type Category = GameId | "imitation" | "matto" | "overall";
 
 /** Highest value first. Equal values share a rank and the next rank is skipped (1, 1, 3). */
 export function rank(entries: { playerId: number; value: number }[]): Standing[] {
