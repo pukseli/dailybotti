@@ -896,8 +896,16 @@ export async function mattoTick(ctx: Ctx, settings: Settings): Promise<void> {
   }
 
   if (time < DRAFT_TIME) return;
-  const challengeDay = await weeklyMattoDay(ctx.db, day);
-  if (day !== challengeDay) return;
+  // Schedule the week's day on a tick of its own. Starting in the same tick would surprise
+  // other contests/tests the first time the key is written; the next minute starts if needed.
+  const monday = weekMonday(day);
+  const weekKey = `matto_week:${monday}`;
+  const scheduled = await ctx.db.prepare("SELECT value FROM settings WHERE key = ?").bind(weekKey).first<{ value: string }>();
+  if (!scheduled) {
+    await weeklyMattoDay(ctx.db, day);
+    return;
+  }
+  if (scheduled.value !== day) return;
   if (await getMattoDay(ctx.db, day)) return;
   await startMatto(ctx, settings, day, null);
 }

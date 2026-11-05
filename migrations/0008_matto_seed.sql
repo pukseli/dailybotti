@@ -1,4 +1,6 @@
 -- Seed characters and themes for Daily Mättö. Real named characters only. added_by 0 = bot.
+-- Split into small INSERTs: D1 rejects oversized statements (SQLITE_TOOBIG).
+
 INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Superman', 'superman', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Batman', 'batman', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -39,7 +41,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Storm', 'storm', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Jean Grey', 'jean grey', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Cyclops', 'cyclops', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Magneto', 'magneto', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Magneto', 'magneto', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Professor X', 'professor x', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Nightcrawler', 'nightcrawler', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Gambit', 'gambit', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -79,7 +84,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Carnage', 'carnage', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Green Goblin', 'green goblin', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Doctor Octopus', 'doctor octopus', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Mysterio', 'mysterio', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Mysterio', 'mysterio', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Homelander', 'homelander', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Soldier Boy', 'soldier boy', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Queen Maeve', 'queen maeve', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -119,7 +127,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Sabine Wren', 'sabine wren', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Ezra Bridger', 'ezra bridger', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Grand Admiral Thrawn', 'grand admiral thrawn', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Darth Revan', 'darth revan', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Darth Revan', 'darth revan', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Kit Fisto', 'kit fisto', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Plo Koon', 'plo koon', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Aayla Secura', 'aayla secura', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -159,7 +170,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Dandelion', 'dandelion', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Regis', 'regis', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Lambert', 'lambert', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Eskel', 'eskel', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Eskel', 'eskel', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Harry Potter', 'harry potter', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Hermione Granger', 'hermione granger', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Ron Weasley', 'ron weasley', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -199,7 +213,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Night King', 'night king', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Khal Drogo', 'khal drogo', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Jorah Mormont', 'jorah mormont', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Samwell Tarly', 'samwell tarly', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Samwell Tarly', 'samwell tarly', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Drogon', 'drogon', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Rhaegal', 'rhaegal', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Viserion', 'viserion', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -239,7 +256,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Monkey D. Luffy', 'monkey d. luffy', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Roronoa Zoro', 'roronoa zoro', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Sanji', 'sanji', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Nami', 'nami', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Nami', 'nami', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Portgas D. Ace', 'portgas d. ace', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Trafalgar Law', 'trafalgar law', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kaido', 'kaido', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -279,7 +299,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Josuke Higashikata', 'josuke higashikata', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Giorno Giovanna', 'giorno giovanna', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Leorio', 'leorio', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Kurapika', 'kurapika', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Kurapika', 'kurapika', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Gon Freecss', 'gon freecss', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Killua Zoldyck', 'killua zoldyck', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Hisoka', 'hisoka', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -319,7 +342,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Poseidon', 'poseidon', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Master Chief', 'master chief', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Cortana', 'cortana', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('The Arbiter', 'the arbiter', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('The Arbiter', 'the arbiter', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Samus Aran', 'samus aran', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Ridley', 'ridley', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Link', 'link', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -359,7 +385,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Dutch van der Linde', 'dutch van der linde', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Sadie Adler', 'sadie adler', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Micah Bell', 'micah bell', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Charles Smith', 'charles smith', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Charles Smith', 'charles smith', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Aloy', 'aloy', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Sylens', 'sylens', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Ezio Auditore', 'ezio auditore', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -399,7 +428,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Red', 'red', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Pac-Man', 'pac-man', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Donkey Kong', 'donkey kong', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Kirby', 'kirby', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Kirby', 'kirby', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Meta Knight', 'meta knight', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('King Dedede', 'king dedede', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Fox McCloud', 'fox mccloud', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -439,7 +471,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Artorias', 'artorias', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Gwyn', 'gwyn', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Solaire of Astora', 'solaire of astora', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Hornet', 'hornet', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Hornet', 'hornet', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('The Knight', 'the knight', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Hollow Knight', 'hollow knight', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Shovel Knight', 'shovel knight', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -479,7 +514,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Will Turner', 'will turner', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Elizabeth Swann', 'elizabeth swann', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Davy Jones', 'davy jones', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Barbossa', 'barbossa', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Barbossa', 'barbossa', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Blackbeard', 'blackbeard', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Maximus', 'maximus', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Commodus', 'commodus', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -519,7 +557,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Ultraman', 'ultraman', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('He-Man', 'he-man', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Skeletor', 'skeletor', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('She-Ra', 'she-ra', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('She-Ra', 'she-ra', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Man-At-Arms', 'man-at-arms', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Teela', 'teela', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Sailor Moon', 'sailor moon', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -559,7 +600,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Isildur', 'isildur', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Elendil', 'elendil', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Witch-king of Angmar', 'witch-king of angmar', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Mouth of Sauron', 'mouth of sauron', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Mouth of Sauron', 'mouth of sauron', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Tommy Oliver', 'tommy oliver', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Rita Repulsa', 'rita repulsa', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Lord Zedd', 'lord zedd', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -599,7 +643,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Noob Saibot', 'noob saibot', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Smoke', 'smoke', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Freya', 'freya', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Baldur', 'baldur', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Baldur', 'baldur', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Mimir', 'mimir', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Tyr', 'tyr', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Heimdall', 'heimdall', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -639,7 +686,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Matti Nykänen', 'matti nykänen', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Janne Ahonen', 'janne ahonen', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Matti Hautamäki', 'matti hautamäki', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Käärijä', 'käärijä', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Käärijä', 'käärijä', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Lordi', 'lordi', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Ismo Leikola', 'ismo leikola', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Robin Packalen', 'robin packalen', 'strong', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -679,7 +729,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Austin Powers', 'austin powers', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Dr. Evil', 'dr. evil', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Mini-Me', 'mini-me', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Scott Evil', 'scott evil', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Scott Evil', 'scott evil', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Ace Ventura', 'ace ventura', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Lloyd Christmas', 'lloyd christmas', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Harry Dunne', 'harry dunne', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -719,7 +772,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Michael Scott', 'michael scott', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Dwight Schrute', 'dwight schrute', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kevin Malone', 'kevin malone', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Creed Bratton', 'creed bratton', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Creed Bratton', 'creed bratton', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Toby Flenderson', 'toby flenderson', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Andy Bernard', 'andy bernard', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Meredith Palmer', 'meredith palmer', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -759,7 +815,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Mrs. Puff', 'mrs. puff', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Larry the Lobster', 'larry the lobster', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('The Dirty Bubble', 'the dirty bubble', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Man Ray', 'man ray', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Man Ray', 'man ray', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('SpongeBob SquarePants', 'spongebob squarepants', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Sandy Cheeks', 'sandy cheeks', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Karen Plankton', 'karen plankton', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -799,7 +858,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Troy McClure', 'troy mcclure', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Rainier Wolfcastle', 'rainier wolfcastle', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kent Brockman', 'kent brockman', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Lindsey Naegle', 'lindsey naegle', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Lindsey Naegle', 'lindsey naegle', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Peter Griffin', 'peter griffin', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Lois Griffin', 'lois griffin', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Meg Griffin', 'meg griffin', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -839,7 +901,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Nasu', 'nasu', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kanga', 'kanga', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Risto Reipas', 'risto reipas', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Nalle Puh', 'nalle puh', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Nalle Puh', 'nalle puh', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Pikku Myy', 'pikku myy', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Nuuskamuikkunen', 'nuuskamuikkunen', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Hemuli', 'hemuli', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -879,7 +944,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Bob-omb', 'bob-omb', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Chain Chomp', 'chain chomp', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Thwomp', 'thwomp', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Dry Bones', 'dry bones', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Dry Bones', 'dry bones', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Jigglypuff', 'jigglypuff', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Magikarp', 'magikarp', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Snorlax', 'snorlax', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -919,7 +987,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Llama', 'llama', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Axolotl', 'axolotl', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Sans', 'sans', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Papyrus', 'papyrus', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Papyrus', 'papyrus', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Flowey', 'flowey', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Temmie', 'temmie', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Annoying Dog', 'annoying dog', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -959,7 +1030,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Eddy', 'eddy', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Plank', 'plank', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Rolf', 'rolf', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Jimmy', 'jimmy', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Jimmy', 'jimmy', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Nazz', 'nazz', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kevin', 'kevin', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Sarah', 'sarah', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -999,7 +1073,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Zapp Brannigan', 'zapp brannigan', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Bender', 'bender', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Philip J. Fry', 'philip j. fry', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Turanga Leela', 'turanga leela', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Turanga Leela', 'turanga leela', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Amy Wong', 'amy wong', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Professor Farnsworth', 'professor farnsworth', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Cubert Farnsworth', 'cubert farnsworth', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -1039,7 +1116,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('George Pig', 'george pig', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Daddy Pig', 'daddy pig', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Mummy Pig', 'mummy pig', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Suzy Sheep', 'suzy sheep', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Suzy Sheep', 'suzy sheep', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Rebecca Rabbit', 'rebecca rabbit', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Danny Dog', 'danny dog', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Pedro Pony', 'pedro pony', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -1079,7 +1159,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Farmor', 'farmor', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Spede Pasanen', 'spede pasanen', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Simsalabim-Simo', 'simsalabim-simo', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Pirkka-Pekka Petelius', 'pirkka-pekka petelius', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Pirkka-Pekka Petelius', 'pirkka-pekka petelius', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Aku Hirviniemi', 'aku hirviniemi', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Stan Saanila', 'stan saanila', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Jaajo Linnonmaa', 'jaajo linnonmaa', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -1119,7 +1202,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Bunny', 'bunny', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Buzz Lightyear', 'buzz lightyear', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Woody', 'woody', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Jessie', 'jessie', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Jessie', 'jessie', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Bullseye', 'bullseye', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Lotso', 'lotso', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Stinky Pete', 'stinky pete', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -1159,7 +1245,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Burt', 'burt', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Yogi Bear', 'yogi bear', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Boo-Boo Bear', 'boo-boo bear', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Ranger Smith', 'ranger smith', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Ranger Smith', 'ranger smith', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Cindy Bear', 'cindy bear', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Huckleberry Hound', 'huckleberry hound', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Quick Draw McGraw', 'quick draw mcgraw', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -1199,7 +1288,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Miss Moneypenny', 'miss moneypenny', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Déagol', 'déagol', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Lobelia Sackville-Baggins', 'lobelia sackville-baggins', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Lotho Sackville-Baggins', 'lotho sackville-baggins', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Lotho Sackville-Baggins', 'lotho sackville-baggins', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Ted Sandyman', 'ted sandyman', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Bill Ferny', 'bill ferny', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Gríma Wormtongue', 'gríma wormtongue', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -1239,7 +1331,10 @@ INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALU
   ('Chopper', 'chopper', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('L3-37', 'l3-37', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('0-0-0', '0-0-0', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('BT-1', 'bt-1', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('BT-1', 'bt-1', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(name_key) DO NOTHING;
+
+INSERT INTO matto_characters (name, name_key, strength, added_by, added_at) VALUES
   ('Aphra', 'aphra', 'weak', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 ON CONFLICT(name_key) DO NOTHING;
 
@@ -1283,7 +1378,10 @@ INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
   ('Kumpi joukkue kirjoittaa paremman romaanin?', 'kumpi joukkue kirjoittaa paremman romaanin?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue säveltää paremman sinfonian?', 'kumpi joukkue säveltää paremman sinfonian?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue ohjaa paremman elokuvan?', 'kumpi joukkue ohjaa paremman elokuvan?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Kumpi joukkue voittaa Nobel-tason tutkimuksessa?', 'kumpi joukkue voittaa nobel-tason tutkimuksessa?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Kumpi joukkue voittaa Nobel-tason tutkimuksessa?', 'kumpi joukkue voittaa nobel-tason tutkimuksessa?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(text_key) DO NOTHING;
+
+INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
   ('Kumpi joukkue voittaa painiottelun?', 'kumpi joukkue voittaa painiottelun?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa judossa?', 'kumpi joukkue voittaa judossa?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa karateturnauksessa?', 'kumpi joukkue voittaa karateturnauksessa?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -1323,7 +1421,10 @@ INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
   ('Kumpi joukkue voittaa valtaistuimen tavoittelussa?', 'kumpi joukkue voittaa valtaistuimen tavoittelussa?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa turnajaisissa?', 'kumpi joukkue voittaa turnajaisissa?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa piirityksessä?', 'kumpi joukkue voittaa piirityksessä?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Kumpi joukkue voittaa merirosvojen kaksintaistelussa?', 'kumpi joukkue voittaa merirosvojen kaksintaistelussa?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Kumpi joukkue voittaa merirosvojen kaksintaistelussa?', 'kumpi joukkue voittaa merirosvojen kaksintaistelussa?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(text_key) DO NOTHING;
+
+INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
   ('Kumpi joukkue voittaa gladiaattoriareenalla?', 'kumpi joukkue voittaa gladiaattoriareenalla?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa samuraikaksintaistelussa?', 'kumpi joukkue voittaa samuraikaksintaistelussa?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa ninjatehtävässä?', 'kumpi joukkue voittaa ninjatehtävässä?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -1363,7 +1464,10 @@ INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
   ('Kumpi joukkue voittaa Amazonin navigoinnissa?', 'kumpi joukkue voittaa amazonin navigoinnissa?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa Atlantin ylityksessä purjeveneellä?', 'kumpi joukkue voittaa atlantin ylityksessä purjeveneellä?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa sukellusveneen ohjauksessa?', 'kumpi joukkue voittaa sukellusveneen ohjauksessa?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Kumpi joukkue voittaa lentotukialuksen komentamisessa?', 'kumpi joukkue voittaa lentotukialuksen komentamisessa?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Kumpi joukkue voittaa lentotukialuksen komentamisessa?', 'kumpi joukkue voittaa lentotukialuksen komentamisessa?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(text_key) DO NOTHING;
+
+INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
   ('Kumpi joukkue voittaa panssarivaunutaistelussa?', 'kumpi joukkue voittaa panssarivaunutaistelussa?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa sniper-duellissa?', 'kumpi joukkue voittaa sniper-duellissa?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa lähitaistelussa?', 'kumpi joukkue voittaa lähitaistelussa?', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -1403,7 +1507,10 @@ INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
   ('Kumpi joukkue voittaa pictionaryssa?', 'kumpi joukkue voittaa pictionaryssa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa scavenger huntissa kauppakeskuksessa?', 'kumpi joukkue voittaa scavenger huntissa kauppakeskuksessa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa pizzavertailussa?', 'kumpi joukkue voittaa pizzavertailussa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Kumpi joukkue voittaa grillauskisassa sateessa?', 'kumpi joukkue voittaa grillauskisassa sateessa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Kumpi joukkue voittaa grillauskisassa sateessa?', 'kumpi joukkue voittaa grillauskisassa sateessa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(text_key) DO NOTHING;
+
+INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
   ('Kumpi joukkue voittaa marjanpoiminnassa?', 'kumpi joukkue voittaa marjanpoiminnassa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa sienestyksessä?', 'kumpi joukkue voittaa sienestyksessä?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa mökkiviikonlopun organisoinnissa?', 'kumpi joukkue voittaa mökkiviikonlopun organisoinnissa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -1443,7 +1550,10 @@ INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
   ('Kumpi joukkue voittaa hotellin aamiaispöydän valtaamisessa?', 'kumpi joukkue voittaa hotellin aamiaispöydän valtaamisessa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa lentokentän turvatarkastuksessa?', 'kumpi joukkue voittaa lentokentän turvatarkastuksessa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa matkalaukun pakkaamisessa 7 kg:aan?', 'kumpi joukkue voittaa matkalaukun pakkaamisessa 7 kg:aan?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Kumpi joukkue voittaa jet lagin kestämisessä?', 'kumpi joukkue voittaa jet lagin kestämisessä?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Kumpi joukkue voittaa jet lagin kestämisessä?', 'kumpi joukkue voittaa jet lagin kestämisessä?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(text_key) DO NOTHING;
+
+INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
   ('Kumpi joukkue voittaa hostellin kuorsauksen kestämisessä?', 'kumpi joukkue voittaa hostellin kuorsauksen kestämisessä?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa Festival-teltan pystytyksessä sateessa?', 'kumpi joukkue voittaa festival-teltan pystytyksessä sateessa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa festivaalien vessajonossa?', 'kumpi joukkue voittaa festivaalien vessajonossa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -1483,7 +1593,10 @@ INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
   ('Kumpi joukkue voittaa alennusmyyntien valtaamisessa?', 'kumpi joukkue voittaa alennusmyyntien valtaamisessa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa kupongin käyttämisessä kassalla?', 'kumpi joukkue voittaa kupongin käyttämisessä kassalla?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa bonuspisteiden optimoinnissa?', 'kumpi joukkue voittaa bonuspisteiden optimoinnissa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Kumpi joukkue voittaa Plussa-pisteissä?', 'kumpi joukkue voittaa plussa-pisteissä?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Kumpi joukkue voittaa Plussa-pisteissä?', 'kumpi joukkue voittaa plussa-pisteissä?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(text_key) DO NOTHING;
+
+INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
   ('Kumpi joukkue voittaa S-Bonuksessa?', 'kumpi joukkue voittaa s-bonuksessa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa kahvilassa tilauksen oikein saamisessa?', 'kumpi joukkue voittaa kahvilassa tilauksen oikein saamisessa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa barista-kisassa?', 'kumpi joukkue voittaa barista-kisassa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -1523,7 +1636,10 @@ INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
   ('Kumpi joukkue voittaa nuotion sytyttämisessä yhdellä tulitikulla?', 'kumpi joukkue voittaa nuotion sytyttämisessä yhdellä tulitikulla?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa kompassin lukemisessa?', 'kumpi joukkue voittaa kompassin lukemisessa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa kartan lukemisessa väärinpäin?', 'kumpi joukkue voittaa kartan lukemisessa väärinpäin?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Kumpi joukkue voittaa geokätkön löytämisessä?', 'kumpi joukkue voittaa geokätkön löytämisessä?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Kumpi joukkue voittaa geokätkön löytämisessä?', 'kumpi joukkue voittaa geokätkön löytämisessä?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(text_key) DO NOTHING;
+
+INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
   ('Kumpi joukkue voittaa Pokemon GO -raidissa?', 'kumpi joukkue voittaa pokemon go -raidissa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa Ingress-kentän valtaamisessa?', 'kumpi joukkue voittaa ingress-kentän valtaamisessa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa Among Us -impostorina?', 'kumpi joukkue voittaa among us -impostorina?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -1563,7 +1679,10 @@ INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
   ('Kumpi joukkue voittaa jääkaapin siivouksessa?', 'kumpi joukkue voittaa jääkaapin siivouksessa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa tiskivuoren raivaamisessa?', 'kumpi joukkue voittaa tiskivuoren raivaamisessa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa pyykkivuoren taittelussa?', 'kumpi joukkue voittaa pyykkivuoren taittelussa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Kumpi joukkue voittaa sukkien parittamisessa?', 'kumpi joukkue voittaa sukkien parittamisessa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Kumpi joukkue voittaa sukkien parittamisessa?', 'kumpi joukkue voittaa sukkien parittamisessa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(text_key) DO NOTHING;
+
+INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
   ('Kumpi joukkue voittaa kadonneen kaukosäätimen etsinnässä?', 'kumpi joukkue voittaa kadonneen kaukosäätimen etsinnässä?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa kadonneiden avainten etsinnässä?', 'kumpi joukkue voittaa kadonneiden avainten etsinnässä?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa puhelimen latausjohdon sotkun selvityksessä?', 'kumpi joukkue voittaa puhelimen latausjohdon sotkun selvityksessä?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -1603,7 +1722,10 @@ INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
   ('Kumpi joukkue voittaa Marie Kondo -metodin noudattamisessa?', 'kumpi joukkue voittaa marie kondo -metodin noudattamisessa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa minimalismissa?', 'kumpi joukkue voittaa minimalismissa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa maximalismissa?', 'kumpi joukkue voittaa maximalismissa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Kumpi joukkue voittaa hyggeilyssä?', 'kumpi joukkue voittaa hyggeilyssä?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Kumpi joukkue voittaa hyggeilyssä?', 'kumpi joukkue voittaa hyggeilyssä?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(text_key) DO NOTHING;
+
+INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
   ('Kumpi joukkue voittaa sisustamisessa Pinterest-moodboardilla?', 'kumpi joukkue voittaa sisustamisessa pinterest-moodboardilla?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa valaistuksen säätämisessä?', 'kumpi joukkue voittaa valaistuksen säätämisessä?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa älykotilaitteiden parituksessa?', 'kumpi joukkue voittaa älykotilaitteiden parituksessa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -1643,7 +1765,10 @@ INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
   ('Kumpi joukkue voittaa löylyjen heittämisessä?', 'kumpi joukkue voittaa löylyjen heittämisessä?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa avantouinnissa ilman kiljuntaa?', 'kumpi joukkue voittaa avantouinnissa ilman kiljuntaa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa uimapuvun kuivatuksessa?', 'kumpi joukkue voittaa uimapuvun kuivatuksessa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  ('Kumpi joukkue voittaa rantapallon puhaltamisessa?', 'kumpi joukkue voittaa rantapallon puhaltamisessa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Kumpi joukkue voittaa rantapallon puhaltamisessa?', 'kumpi joukkue voittaa rantapallon puhaltamisessa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(text_key) DO NOTHING;
+
+INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
   ('Kumpi joukkue voittaa hiekkalinnan rakentamisessa?', 'kumpi joukkue voittaa hiekkalinnan rakentamisessa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa frisbeegolfissa?', 'kumpi joukkue voittaa frisbeegolfissa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   ('Kumpi joukkue voittaa pétanquessa?', 'kumpi joukkue voittaa pétanquessa?', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
