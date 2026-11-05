@@ -45,7 +45,10 @@ beforeEach(async () => {
   await resetDb();
   tg = new FakeTelegram();
   // Command menus start up to date, as after any deploy that didn't change them.
-  await env.DB.prepare("INSERT INTO settings (key, value) VALUES ('bot_username', ?), ('bot_id', '999'), ('command_menus', ?)")
+  // Pin Matto's auto-day off Friday test dates so tick() doesn't start a contest mid-test.
+  await env.DB.prepare(
+    "INSERT INTO settings (key, value) VALUES ('bot_username', ?), ('bot_id', '999'), ('command_menus', ?), ('matto_week:2026-10-19', '2026-10-25')",
+  )
     .bind(BOT_USERNAME, COMMAND_MENUS)
     .run();
 });

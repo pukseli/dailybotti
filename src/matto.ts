@@ -272,7 +272,14 @@ export async function weeklyMattoDay(db: D1Database, day: string): Promise<strin
     return existing.day;
   }
 
-  const startDay = day > monday ? day : monday;
+  // Never auto-pick "today" when first scheduling: the next tick would otherwise start a
+  // contest in the middle of other evening deadlines (imitaatio etc.). /matto can still start today.
+  const startDay = addDays(day, 1);
+  if (startDay > sunday) {
+    // No later day left this week — mark handled without an auto-start day.
+    await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").bind(key, "none").run();
+    return "none";
+  }
   const remaining = daysBetween(startDay, sunday) + 1;
   const chosen = addDays(startDay, Math.floor(Math.random() * remaining));
   await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").bind(key, chosen).run();

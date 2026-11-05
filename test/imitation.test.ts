@@ -45,7 +45,7 @@ beforeEach(async () => {
   await resetDb();
   tg = new FakeTelegram();
   await env.DB.prepare(
-    "INSERT INTO settings (key, value) VALUES ('bot_username', ?), ('bot_id', '999'), ('command_menus', ?), ('group_chat_id', ?), ('imitation_week:2026-10-19', '2026-10-23')",
+    "INSERT INTO settings (key, value) VALUES ('bot_username', ?), ('bot_id', '999'), ('command_menus', ?), ('group_chat_id', ?), ('imitation_week:2026-10-19', '2026-10-23'), ('matto_week:2026-10-19', '2026-10-25')",
   )
     .bind(BOT_USERNAME, COMMAND_MENUS, String(GROUP))
     .run();
