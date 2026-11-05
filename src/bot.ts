@@ -52,6 +52,7 @@ import {
   handleMattoText,
   mattoBallotCommand,
   mattoCommand,
+  mattoResetCommand,
   mattoTick,
 } from "./matto";
 import { GAMES, dayForResult, gameById, matchGameArg, parseResults, parseRoundData, type GameId, type ParsedResult } from "./games";
@@ -592,6 +593,10 @@ async function privateCommand(ctx: Ctx, msg: Message, user: User, name: string, 
     case "mattotilanne":
       await challengeMattoCommand(ctx, msg);
       return;
+    case "mattonollaa":
+    case "maettonollaa":
+      await mattoResetCommand(ctx, msg, settings);
+      return;
     case "komennot":
     case "commands":
       await reply(ctx, msg, renderCommands());
@@ -681,6 +686,10 @@ async function groupCommand(ctx: Ctx, msg: Message, name: string, settings: Sett
       return;
     case "mattotilanne":
       await challengeMattoCommand(ctx, msg);
+      return;
+    case "mattonollaa":
+    case "maettonollaa":
+      await mattoResetCommand(ctx, msg, settings);
       return;
     case "vote_leaderboard":
     case "vote":

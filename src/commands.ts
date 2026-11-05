@@ -18,6 +18,7 @@ export const PRIVATE_COMMANDS = [
   { command: "matto", description: "Daily Mättö – draft / äänestyslippu" },
   { command: "mattoaanesta", description: "Daily Mättö -äänestyslippu" },
   { command: "mattotilanne", description: "Daily Mättö -tilanne" },
+  { command: "mattonollaa", description: "Nollaa päivän Daily Mättö (ryhmässä)" },
   { command: "komennot", description: "Kaikki käytössä olevat komennot" },
   { command: "help", description: "Käyttö- ja käyttöönotto-ohjeet" },
 ];
@@ -35,6 +36,7 @@ export const GROUP_COMMANDS = [
   { command: "ehdotukset", description: "Imitaatioehdotukset" },
   { command: "matto", description: "Käynnistä Daily Mättö" },
   { command: "mattotilanne", description: "Daily Mättö -tilanne" },
+  { command: "mattonollaa", description: "Nollaa päivän Daily Mättö" },
   { command: "vote_leaderboard", description: "Äänestys väliaikatilanteen julkaisusta" },
   { command: "finalize", description: "Äänestys päivän kisan sulkemisesta" },
   { command: "komennot", description: "Kaikki käytössä olevat komennot" },

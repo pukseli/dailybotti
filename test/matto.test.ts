@@ -291,6 +291,72 @@ describe("matto flow", () => {
     expect(placements?.n).toBe(4);
   });
 
+  it("resets an open vote with /mattonollaa and keeps drafts", async () => {
+    await register();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/matto"));
+    for (const p of PLAYERS) await draftFive(p);
+
+    const beforeTheme = await env.DB.prepare("SELECT theme_id FROM matto_days WHERE day = ?")
+      .bind(DAY)
+      .first<{ theme_id: number }>();
+    expect(beforeTheme?.theme_id).toBeTruthy();
+
+    // Cast one vote so ballots/votes exist
+    const messageId = firstBallotMessageId(anna.id);
+    const ballot = latestKeyboard(anna.id);
+    const pick = (ballot.params.reply_markup.inline_keyboard as { callback_data: string }[][])
+      .flat()
+      .find((b) => b.callback_data.startsWith("mv:"))!;
+    await handleUpdate(makeCtx(tg, FRI_NOON), tap(anna, pick.callback_data, messageId));
+
+    tg.calls.length = 0;
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/mattonollaa"));
+
+    const row = await env.DB.prepare("SELECT vote_opened_at, closed_at, theme_id FROM matto_days WHERE day = ?")
+      .bind(DAY)
+      .first<{ vote_opened_at: string | null; closed_at: string | null; theme_id: number }>();
+    expect(row?.vote_opened_at).toBeTruthy();
+    expect(row?.closed_at).toBeNull();
+    expect(row?.theme_id).toBe(beforeTheme!.theme_id);
+
+    const votes = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM matto_votes v JOIN matto_matchups m ON m.id = v.matchup_id WHERE m.day = ?",
+    )
+      .bind(DAY)
+      .first<{ n: number }>();
+    expect(votes?.n).toBe(0);
+
+    const teams = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM matto_teams WHERE day = ? AND completed_at IS NOT NULL",
+    )
+      .bind(DAY)
+      .first<{ n: number }>();
+    expect(teams?.n).toBe(4);
+
+    const fresh = tg.sentTo(ben.id).find((c) => String(c.params.text).includes("äänestys"));
+    expect(fresh?.params.text).toContain("<b>Teema:</b>");
+    expect(fresh?.params.text).toContain("Ottelu 1/3");
+
+    const ack = tg.sentTo(GROUP).map((c) => c.params.text as string).find((t) => t.includes("nollattu"));
+    expect(ack).toBeTruthy();
+  });
+
+  it("wipes the whole day with /mattonollaa kaikki", async () => {
+    await register();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/matto"));
+    for (const p of PLAYERS) await draftFive(p);
+
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/mattonollaa kaikki"));
+
+    const day = await env.DB.prepare("SELECT day FROM matto_days WHERE day = ?").bind(DAY).first();
+    expect(day).toBeNull();
+    const offers = await env.DB.prepare("SELECT COUNT(*) AS n FROM matto_offers WHERE day = ?").bind(DAY).first<{ n: number }>();
+    expect(offers?.n).toBe(0);
+
+    const ack = tg.sentTo(GROUP).map((c) => c.params.text as string).find((t) => t.includes("nollattu kokonaan"));
+    expect(ack).toBeTruthy();
+  });
+
   it("cancels at draft deadline if fewer than two teams finished", async () => {
     await register();
     await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/matto"));

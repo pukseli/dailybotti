@@ -1281,7 +1281,95 @@ export async function handleMattoText(ctx: Ctx, msg: Message, user: User, text: 
   return true;
 }
 
+/** Wipe votes/ballots/matchups and reopen the day for a fresh vote (teams kept). */
+async function clearMattoVotePhase(db: D1Database, day: string): Promise<void> {
+  await db.batch([
+    db
+      .prepare(
+        `DELETE FROM matto_votes WHERE matchup_id IN (SELECT id FROM matto_matchups WHERE day = ?)`,
+      )
+      .bind(day),
+    db.prepare("DELETE FROM matto_ballots WHERE day = ?").bind(day),
+    db.prepare("DELETE FROM matto_matchups WHERE day = ?").bind(day),
+    db.prepare("UPDATE matto_teams SET label = NULL WHERE day = ?").bind(day),
+    db
+      .prepare(
+        `UPDATE matto_days SET vote_opened_at = NULL, closed_at = NULL WHERE day = ?`,
+      )
+      .bind(day),
+    db.prepare("DELETE FROM placements WHERE day = ? AND category = 'matto'").bind(day),
+  ]);
+}
+
+/** Delete today's entire contest so /matto can start from scratch. */
+async function wipeMattoDay(db: D1Database, day: string): Promise<void> {
+  await db.batch([
+    db
+      .prepare(
+        `DELETE FROM matto_votes WHERE matchup_id IN (SELECT id FROM matto_matchups WHERE day = ?)`,
+      )
+      .bind(day),
+    db.prepare("DELETE FROM matto_ballots WHERE day = ?").bind(day),
+    db.prepare("DELETE FROM matto_matchups WHERE day = ?").bind(day),
+    db.prepare("DELETE FROM matto_offers WHERE day = ?").bind(day),
+    db.prepare("DELETE FROM matto_teams WHERE day = ?").bind(day),
+    db.prepare("DELETE FROM matto_days WHERE day = ?").bind(day),
+    db.prepare("DELETE FROM placements WHERE day = ? AND category = 'matto'").bind(day),
+  ]);
+}
+
 // ---------- commands ----------
+
+/**
+ * /mattonollaa in the group resets today's contest.
+ * Default: if voting has started (or finished), keep drafts and reopen the vote; otherwise wipe the day.
+ * `/mattonollaa kaikki` always wipes draft + vote so /matto can start fresh.
+ */
+export async function mattoResetCommand(ctx: Ctx, msg: Message, settings: Settings): Promise<void> {
+  if (msg.chat.type === "private") {
+    await reply(ctx, msg, "Nollaa päivän mättö ryhmässä: <code>/mattonollaa</code> (tai <code>/mattonollaa kaikki</code>).");
+    return;
+  }
+  if (msg.chat.id !== settings.groupChatId) return;
+
+  const day = today(ctx);
+  const row = await getMattoDay(ctx.db, day);
+  if (!row) {
+    await reply(ctx, msg, `⚔️ Ei nollattavaa: Daily Mättöä ei ole käynnissä ${day}.`);
+    return;
+  }
+
+  const raw = (msg.text ?? msg.caption ?? "").trim();
+  const fullWipe = /\bkaikki\b/i.test(raw);
+
+  if (fullWipe || !row.vote_opened_at) {
+    await wipeMattoDay(ctx.db, day);
+    await reply(
+      ctx,
+      msg,
+      `⚔️ Daily Mättö (${day}) nollattu kokonaan (draft + äänestys). Käynnistä uudelleen: <code>/matto</code>.`,
+    );
+    return;
+  }
+
+  const finished = (await teamsFor(ctx.db, day)).filter((t) => t.completed_at);
+  await clearMattoVotePhase(ctx.db, day);
+  if (finished.length < 3) {
+    await reply(
+      ctx,
+      msg,
+      `⚔️ Äänestys nollattu (${day}), mutta valmiita joukkueita on vain ${finished.length}. Tarvitaan 3+ — nollaa koko peli (<code>/mattonollaa kaikki</code>) tai odota draftia.`,
+    );
+    return;
+  }
+
+  await openMattoVote(ctx, settings, day);
+  await reply(
+    ctx,
+    msg,
+    `⚔️ Äänestys nollattu ja avattu uudelleen (${day}). Draftit säilyivät; teema näkyy äänestyslipussa. Pyydä uusi lippu: <code>/matto</code> tai <code>/mattoaanesta</code>.`,
+  );
+}
 
 /** /matto in the group starts (or reports) today's contest. Privately resends draft/ballot. */
 export async function mattoCommand(ctx: Ctx, msg: Message, user: User, settings: Settings): Promise<void> {
