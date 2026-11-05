@@ -1145,8 +1145,13 @@ export async function mattoCommand(ctx: Ctx, msg: Message, user: User, settings:
       return;
     }
     if (!row.vote_opened_at) {
+      // Always send a new card: editing the old one can leave a buttonless message stuck.
+      await ctx.db
+        .prepare("UPDATE matto_teams SET draft_message_id = NULL WHERE day = ? AND player_id = ?")
+        .bind(day, user.id)
+        .run();
       const ok = await sendDraftCard(ctx, day, user.id);
-      await reply(ctx, msg, ok ? "Lähetin draft-viestin." : "En saanut lähetettyä draftia. Paina Start ja yritä uudelleen.");
+      await reply(ctx, msg, ok ? "Lähetin uuden draft-viestin nappeineen." : "En saanut lähetettyä draftia. Paina Start ja yritä uudelleen.");
       return;
     }
     await ctx.db
