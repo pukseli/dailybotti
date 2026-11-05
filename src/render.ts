@@ -572,6 +572,8 @@ export function renderCommands(): string {
     "• <code>/matto</code> – Käynnistä peli ryhmässä, tai pyydä draft/äänestyslippu yksityisesti",
     "• <code>/mattotilanne</code> – Draftin tai äänestyksen tilanne (tai tulokset)",
     "• <code>/mattoaanesta</code> – Pyydä uusi mättö-äänestyslippu yksityisesti",
+    "• Draft ilman nappeja: vastaa botille <code>pidä</code> / <code>ohita</code> (tai <code>p</code> / <code>o</code>)",
+    "• Äänestys ilman nappeja: vastaa joukkueen nimellä (esim. <code>Alfa</code>) tai <code>a</code>/<code>b</code>; <code>alusta</code> aloittaa uudelleen",
     "",
     "<b>Asetukset ja ohjeet</b>",
     "• <code>/name Uusi nimi</code> (tai <code>/nimi</code>) – Vaihda nimesi tauluun, palkintopalleille ja tilastoihin (<code>/name reset</code> palauttaa Telegram-nimen)",

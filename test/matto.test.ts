@@ -187,6 +187,32 @@ describe("matto flow", () => {
     expect(kept?.n).toBe(5);
   });
 
+  it("accepts draft keep/skip as plain text without buttons", async () => {
+    await register();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/matto"));
+    for (let i = 0; i < 5; i++) {
+      await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, i % 2 === 0 ? "pidä" : "ohita"));
+    }
+    // May need more keeps if skips used — keep until done
+    for (let guard = 0; guard < 10; guard++) {
+      const team = await env.DB.prepare("SELECT completed_at FROM matto_teams WHERE day = ? AND player_id = ?")
+        .bind(DAY, anna.id)
+        .first<{ completed_at: string | null }>();
+      if (team?.completed_at) break;
+      await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, "pidä"));
+    }
+    const team = await env.DB.prepare("SELECT completed_at FROM matto_teams WHERE day = ? AND player_id = ?")
+      .bind(DAY, anna.id)
+      .first<{ completed_at: string | null }>();
+    expect(team?.completed_at).toBeTruthy();
+    const kept = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM matto_offers WHERE day = ? AND player_id = ? AND decision IN ('keep', 'forced')",
+    )
+      .bind(DAY, anna.id)
+      .first<{ n: number }>();
+    expect(kept?.n).toBe(5);
+  });
+
   it("opens anonymous voting once everyone has drafted", async () => {
     await register();
     await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/matto"));
@@ -201,6 +227,33 @@ describe("matto flow", () => {
     const ballot = tg.sentTo(ben.id).find((c) => String(c.params.text).includes("äänestys"));
     expect(ballot?.params.text).toContain("Teema on salainen");
     expect(ballot?.params.text).not.toContain(anna.first_name);
+    expect(ballot?.params.text).toMatch(/Vastaa <code>.+<\/code> tai <code>.+<\/code>/);
+  });
+
+  it("accepts votes as plain team-label text", async () => {
+    await register();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/matto"));
+    for (const p of PLAYERS) await draftFive(p);
+
+    for (const p of PLAYERS) {
+      for (let i = 0; i < 6; i++) {
+        const ballot = [...tg.calls]
+          .reverse()
+          .find(
+            (c) =>
+              (c.method === "sendMessage" || c.method === "editMessageText") &&
+              c.params.chat_id === p.id &&
+              String(c.params.text).includes("Ottelu"),
+          );
+        const text = String(ballot?.params.text ?? "");
+        const m = /Ottelu \d+\/\d+: ([^<]+) vs ([^\n<]+)/.exec(text.replace(/<[^>]+>/g, ""));
+        expect(m).toBeTruthy();
+        await handleUpdate(makeCtx(tg, FRI_NOON), dm(p, m![1]!.trim()));
+      }
+    }
+
+    const closed = await env.DB.prepare("SELECT closed_at FROM matto_days WHERE day = ?").bind(DAY).first<{ closed_at: string | null }>();
+    expect(closed?.closed_at).toBeTruthy();
   });
 
   it("posts revealed results after everyone votes", async () => {

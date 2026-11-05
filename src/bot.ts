@@ -49,6 +49,7 @@ import {
 import {
   challengeMattoCommand,
   handleMattoTap,
+  handleMattoText,
   mattoBallotCommand,
   mattoCommand,
   mattoTick,
@@ -179,6 +180,7 @@ export async function handleUpdate(ctx: Ctx, update: Update): Promise<void> {
       return;
     }
     if (command.kind === "command") return privateCommand(ctx, msg, msg.from, command.name, settings);
+    if (await handleMattoText(ctx, msg, msg.from, text, settings)) return;
     return privateResults(ctx, msg, msg.from, text, settings);
   }
 

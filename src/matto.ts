@@ -322,12 +322,13 @@ function renderDraftCard(opts: {
   if (opts.keptNames.length) lines.push("", `Joukkueesi: ${opts.keptNames.map(escapeHtml).join(" · ")}`);
   if (opts.forced) {
     lines.push("", "Pakko ottaa — valittavia paikkoja on jäljellä yhtä monta kuin hahmoja.");
+    lines.push("Vastaa: <code>pidä</code> (tai napilla).");
     return {
       text: lines.join("\n"),
       keyboard: [[{ text: "✅ Pidä", callback_data: `mk:${opts.day}:${opts.position}` }]],
     };
   }
-  lines.push("", "Pidä vai ohita?");
+  lines.push("", "Pidä vai ohita? Vastaa <code>pidä</code> / <code>ohita</code> (tai <code>p</code> / <code>o</code>), tai käytä nappeja.");
   return {
     text: lines.join("\n"),
     keyboard: [
@@ -359,6 +360,7 @@ function renderAnnouncement(botUsername: string | null, startedByName: string | 
     `${who} mättö-pelin. Jokainen saa yksityisviestinä 10 hahmoa yksi kerrallaan — pidä tai ohita, kunnes joukkueessa on ${KEEP_COUNT}.`,
     `Puolet tarjouksista on vahvoja, puolet heikkoja (järjestys sekoitettu). Teema paljastuu vasta tuloksissa.`,
     "",
+    `Draft ja äänestys toimivat myös ilman nappeja: vastaa botille <code>pidä</code>/<code>ohita</code>, äänestyksessä joukkueen nimellä (esim. <code>Alfa</code>).`,
     `Draft päättyy klo ${DRAFT_DEADLINE} (tai heti kun kaikki ovat valmiita). Äänestys käydään anonyymisti yksityisviesteissä.`,
     `Jos et ole avannut ${bot} yksityisesti, avaa ja paina Start.`,
   ].join("\n");
@@ -384,6 +386,7 @@ function renderBallot(opts: {
 
   if (isBallotComplete(opts.cursor, opts.matchups.length)) {
     lines.push("", "✅ Kaikki ottelut äänestetty. Voit muuttaa ääniäsi, kunnes äänestys päättyy.");
+    lines.push("Vastaa <code>alusta</code> aloittaaksesi uudelleen (tai napilla).");
     return { text: lines.join("\n"), keyboard: [[{ text: "↩️ Aloita äänestys alusta", callback_data: `mr:${opts.day}` }]] };
   }
 
@@ -392,6 +395,7 @@ function renderBallot(opts: {
   const labelB = opts.labels.get(m.team_b) ?? "?";
   lines.push("", `<b>Ottelu ${opts.cursor + 1}/${opts.matchups.length}</b>: ${escapeHtml(labelA)} vs ${escapeHtml(labelB)}`);
   lines.push("Kumpi voittaa päivän salaisessa haasteessa?");
+  lines.push(`Vastaa <code>${escapeHtml(labelA)}</code> tai <code>${escapeHtml(labelB)}</code> (tai <code>a</code>/<code>b</code>). Alusta: <code>alusta</code>.`);
   return {
     text: lines.join("\n"),
     keyboard: [
@@ -944,6 +948,156 @@ export async function handleMattoTap(ctx: Ctx, settings: Settings, cq: CallbackQ
   await answer("");
 }
 
+/** Shared draft keep/skip. `expectedPosition` is set for button taps; text replies use the current card. */
+async function applyDraftChoice(
+  ctx: Ctx,
+  settings: Settings,
+  playerId: number,
+  day: string,
+  kind: "k" | "s",
+  expectedPosition: number | null,
+): Promise<{ ok: boolean; note: string }> {
+  const row = await getMattoDay(ctx.db, day);
+  if (!row || row.closed_at || row.vote_opened_at) return { ok: false, note: "Draft on jo päättynyt." };
+  const offers = await offersFor(ctx.db, day, playerId);
+  if (offers.length === 0) return { ok: false, note: "Sinulla ei ole draftia tähän peliin." };
+  const team = await getTeam(ctx.db, day, playerId);
+  if (team?.completed_at) return { ok: false, note: "Joukkueesi on jo valmis." };
+
+  const { kept, index, remaining } = draftProgress(offers);
+  const current = offers[index];
+  if (!current) return { ok: false, note: "Draft on jo päättynyt." };
+  if (expectedPosition !== null && current.position !== expectedPosition) {
+    return { ok: false, note: "Tämä tarjous ei ole enää voimassa. Katso uusin draft-viesti tai lähetä /matto." };
+  }
+
+  let decision: "keep" | "skip" | "forced";
+  if (kind === "s") {
+    if (!canSkip(kept, remaining) || mustKeep(kept, remaining)) {
+      return { ok: false, note: "Et voi ohittaa — tämä hahmo on pakko ottaa. Vastaa: pidä" };
+    }
+    decision = "skip";
+  } else {
+    decision = mustKeep(kept, remaining) ? "forced" : "keep";
+  }
+
+  await ctx.db
+    .prepare("UPDATE matto_offers SET decision = ?, decided_at = ? WHERE day = ? AND player_id = ? AND position = ? AND decision IS NULL")
+    .bind(decision, ctx.now.toISOString(), day, playerId, current.position)
+    .run();
+
+  const nextOffers = await offersFor(ctx.db, day, playerId);
+  const nextKept = nextOffers.filter((o) => o.decision === "keep" || o.decision === "forced").length;
+  const note = decision === "skip" ? "Ohitettu." : "Pidetty!";
+
+  if (nextKept >= KEEP_COUNT) {
+    const leftovers = nextOffers.filter((o) => o.decision === null);
+    if (leftovers.length) {
+      await ctx.db.batch(
+        leftovers.map((o) =>
+          ctx.db
+            .prepare("UPDATE matto_offers SET decision = 'skip', decided_at = ? WHERE day = ? AND player_id = ? AND position = ?")
+            .bind(ctx.now.toISOString(), day, playerId, o.position),
+        ),
+      );
+    }
+    await completeDraft(ctx, settings, day, playerId);
+    return { ok: true, note };
+  }
+
+  let working = await offersFor(ctx.db, day, playerId);
+  let prog = draftProgress(working);
+  while (prog.remaining > 0 && mustKeep(prog.kept, prog.remaining) && prog.kept < KEEP_COUNT) {
+    const card = working[prog.index]!;
+    await ctx.db
+      .prepare("UPDATE matto_offers SET decision = 'forced', decided_at = ? WHERE day = ? AND player_id = ? AND position = ?")
+      .bind(ctx.now.toISOString(), day, playerId, card.position)
+      .run();
+    working = await offersFor(ctx.db, day, playerId);
+    prog = draftProgress(working);
+    if (prog.kept >= KEEP_COUNT) {
+      await completeDraft(ctx, settings, day, playerId);
+      return { ok: true, note };
+    }
+  }
+
+  await sendDraftCard(ctx, day, playerId);
+  return { ok: true, note };
+}
+
+async function applyVoteReset(ctx: Ctx, settings: Settings, voterId: number, day: string): Promise<{ ok: boolean; note: string }> {
+  const row = await getMattoDay(ctx.db, day);
+  if (!row?.vote_opened_at || row.closed_at) return { ok: false, note: "Äänestys ei ole käynnissä." };
+  const matchups = await matchupsFor(ctx.db, day);
+  if (matchups.length) {
+    await ctx.db
+      .prepare(`DELETE FROM matto_votes WHERE voter_id = ? AND matchup_id IN (SELECT id FROM matto_matchups WHERE day = ?)`)
+      .bind(voterId, day)
+      .run();
+  }
+  await ctx.db
+    .prepare("UPDATE matto_ballots SET cursor = 0, ballot_message_id = NULL, updated_at = ? WHERE day = ? AND voter_id = ?")
+    .bind(ctx.now.toISOString(), day, voterId)
+    .run();
+  await sendMattoBallot(ctx, settings, day, voterId);
+  await refreshGroupStatus(ctx, settings, day);
+  return { ok: true, note: "Äänestys aloitettu alusta." };
+}
+
+async function applyVoteChoice(
+  ctx: Ctx,
+  settings: Settings,
+  voterId: number,
+  day: string,
+  choice: number,
+  expectedMatchupId: number | null,
+): Promise<{ ok: boolean; note: string }> {
+  const row = await getMattoDay(ctx.db, day);
+  if (!row?.vote_opened_at || row.closed_at) return { ok: false, note: "Äänestys ei ole käynnissä." };
+  const ballot = await getBallot(ctx.db, day, voterId);
+  if (!ballot) return { ok: false, note: "Sinulla ei ole äänestyslippua. Lähetä /matto." };
+  const matchups = await matchupsFor(ctx.db, day);
+  if (isBallotComplete(ballot.cursor, matchups.length)) {
+    return { ok: false, note: "Äänesi on jo tallessa. Vastaa <code>alusta</code>, jos haluat vaihtaa." };
+  }
+  const current = matchups[ballot.cursor];
+  if (!current) return { ok: false, note: "Äänestys on jo päättynyt." };
+  if (expectedMatchupId !== null && current.id !== expectedMatchupId) {
+    return { ok: false, note: "Tämä ottelu ei ole vuorossa. Katso uusin äänestysviesti tai lähetä /matto." };
+  }
+  if (choice !== current.team_a && choice !== current.team_b) {
+    return { ok: false, note: "Virheellinen valinta." };
+  }
+
+  await ctx.db
+    .prepare(
+      `INSERT INTO matto_votes (matchup_id, voter_id, choice, updated_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(matchup_id, voter_id) DO UPDATE SET choice = excluded.choice, updated_at = excluded.updated_at`,
+    )
+    .bind(current.id, voterId, choice, ctx.now.toISOString())
+    .run();
+  const nextCursor = ballot.cursor + 1;
+  await ctx.db
+    .prepare("UPDATE matto_ballots SET cursor = ?, updated_at = ? WHERE day = ? AND voter_id = ?")
+    .bind(nextCursor, ctx.now.toISOString(), day, voterId)
+    .run();
+
+  await sendMattoBallot(ctx, settings, day, voterId);
+
+  const wasComplete = isBallotComplete(ballot.cursor, matchups.length);
+  const nowComplete = isBallotComplete(nextCursor, matchups.length);
+  if (wasComplete !== nowComplete) {
+    await refreshGroupStatus(ctx, settings, day);
+    if (nowComplete) {
+      const ballots = await ballotsFor(ctx.db, day);
+      if (ballots.every((b) => isBallotComplete(b.cursor, matchups.length))) {
+        await closeMatto(ctx, settings, day, false);
+      }
+    }
+  }
+  return { ok: true, note: "Ääni tallessa." };
+}
+
 async function handleDraftTap(
   ctx: Ctx,
   settings: Settings,
@@ -953,83 +1107,8 @@ async function handleDraftTap(
   position: number,
   answer: (text: string) => Promise<boolean>,
 ): Promise<void> {
-  const row = await getMattoDay(ctx.db, day);
-  if (!row || row.closed_at || row.vote_opened_at) {
-    await answer("Draft on jo päättynyt.");
-    return;
-  }
-  const offers = await offersFor(ctx.db, day, cq.from.id);
-  if (offers.length === 0) {
-    await answer("Sinulla ei ole draftia tähän peliin.");
-    return;
-  }
-  const team = await getTeam(ctx.db, day, cq.from.id);
-  if (team?.completed_at) {
-    await answer("Joukkueesi on jo valmis.");
-    return;
-  }
-
-  const { kept, index, remaining } = draftProgress(offers);
-  const current = offers[index];
-  if (!current || current.position !== position) {
-    await answer("Tämä tarjous ei ole enää voimassa.");
-    return;
-  }
-
-  let decision: "keep" | "skip" | "forced";
-  if (kind === "s") {
-    if (!canSkip(kept, remaining) || mustKeep(kept, remaining)) {
-      await answer("Et voi ohittaa — tämä hahmo on pakko ottaa.");
-      return;
-    }
-    decision = "skip";
-  } else {
-    decision = mustKeep(kept, remaining) ? "forced" : "keep";
-  }
-
-  await ctx.db
-    .prepare("UPDATE matto_offers SET decision = ?, decided_at = ? WHERE day = ? AND player_id = ? AND position = ? AND decision IS NULL")
-    .bind(decision, ctx.now.toISOString(), day, cq.from.id, position)
-    .run();
-
-  const nextOffers = await offersFor(ctx.db, day, cq.from.id);
-  const nextKept = nextOffers.filter((o) => o.decision === "keep" || o.decision === "forced").length;
-  await answer(decision === "skip" ? "Ohitettu." : "Pidetty!");
-
-  if (nextKept >= KEEP_COUNT) {
-    // Auto-skip any leftover offers so the deal is closed cleanly.
-    const leftovers = nextOffers.filter((o) => o.decision === null);
-    if (leftovers.length) {
-      await ctx.db.batch(
-        leftovers.map((o) =>
-          ctx.db
-            .prepare("UPDATE matto_offers SET decision = 'skip', decided_at = ? WHERE day = ? AND player_id = ? AND position = ?")
-            .bind(ctx.now.toISOString(), day, cq.from.id, o.position),
-        ),
-      );
-    }
-    await completeDraft(ctx, settings, day, cq.from.id);
-    return;
-  }
-
-  // Force-keep remaining cards if the player has no skip room left.
-  let working = await offersFor(ctx.db, day, cq.from.id);
-  let prog = draftProgress(working);
-  while (prog.remaining > 0 && mustKeep(prog.kept, prog.remaining) && prog.kept < KEEP_COUNT) {
-    const card = working[prog.index]!;
-    await ctx.db
-      .prepare("UPDATE matto_offers SET decision = 'forced', decided_at = ? WHERE day = ? AND player_id = ? AND position = ?")
-      .bind(ctx.now.toISOString(), day, cq.from.id, card.position)
-      .run();
-    working = await offersFor(ctx.db, day, cq.from.id);
-    prog = draftProgress(working);
-    if (prog.kept >= KEEP_COUNT) {
-      await completeDraft(ctx, settings, day, cq.from.id);
-      return;
-    }
-  }
-
-  await sendDraftCard(ctx, day, cq.from.id);
+  const result = await applyDraftChoice(ctx, settings, cq.from.id, day, kind, position);
+  await answer(result.note.replace(/<[^>]+>/g, ""));
 }
 
 async function handleVoteReset(
@@ -1039,31 +1118,14 @@ async function handleVoteReset(
   day: string,
   answer: (text: string) => Promise<boolean>,
 ): Promise<void> {
-  const row = await getMattoDay(ctx.db, day);
-  if (!row?.vote_opened_at || row.closed_at) {
-    await answer("Äänestys ei ole käynnissä.");
-    return;
-  }
-  const matchups = await matchupsFor(ctx.db, day);
-  if (matchups.length) {
-    await ctx.db
-      .prepare(`DELETE FROM matto_votes WHERE voter_id = ? AND matchup_id IN (SELECT id FROM matto_matchups WHERE day = ?)`)
-      .bind(cq.from.id, day)
-      .run();
-  }
-  await ctx.db
-    .prepare("UPDATE matto_ballots SET cursor = 0, updated_at = ? WHERE day = ? AND voter_id = ?")
-    .bind(ctx.now.toISOString(), day, cq.from.id)
-    .run();
   if (cq.message) {
     await ctx.db
       .prepare("UPDATE matto_ballots SET ballot_message_id = ? WHERE day = ? AND voter_id = ?")
       .bind(cq.message.message_id, day, cq.from.id)
       .run();
   }
-  await sendMattoBallot(ctx, settings, day, cq.from.id);
-  await answer("Äänestys aloitettu alusta.");
-  await refreshGroupStatus(ctx, settings, day);
+  const result = await applyVoteReset(ctx, settings, cq.from.id, day);
+  await answer(result.note.replace(/<[^>]+>/g, ""));
 }
 
 async function handleVotePick(
@@ -1075,57 +1137,112 @@ async function handleVotePick(
   choice: number,
   answer: (text: string) => Promise<boolean>,
 ): Promise<void> {
+  if (cq.message) {
+    await ctx.db
+      .prepare("UPDATE matto_ballots SET ballot_message_id = ? WHERE day = ? AND voter_id = ?")
+      .bind(cq.message.message_id, day, cq.from.id)
+      .run();
+  }
+  const result = await applyVoteChoice(ctx, settings, cq.from.id, day, choice, matchupId);
+  await answer(result.note.replace(/<[^>]+>/g, ""));
+}
+
+function normalizeMattoText(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/^\/+/, "");
+}
+
+export function parseDraftTextChoice(text: string): "k" | "s" | null {
+  const t = normalizeMattoText(text);
+  if (["pida", "keep", "p", "+"].includes(t)) return "k";
+  if (["ohita", "skip", "o", "-"].includes(t)) return "s";
+  return null;
+}
+
+export function parseVoteResetText(text: string): boolean {
+  const t = normalizeMattoText(text);
+  return ["alusta", "reset", "uudestaan", "uudelleen"].includes(t);
+}
+
+/**
+ * Private-chat text for draft/vote when inline buttons aren't available (e.g. some Telegram clients).
+ * Returns true if the message was handled as a Mättö action.
+ */
+export async function handleMattoText(ctx: Ctx, msg: Message, user: User, text: string, settings: Settings): Promise<boolean> {
+  const day = today(ctx);
   const row = await getMattoDay(ctx.db, day);
-  if (!row?.vote_opened_at || row.closed_at) {
-    await answer("Äänestys ei ole käynnissä.");
-    return;
+  if (!row || row.closed_at) return false;
+
+  if (!row.vote_opened_at) {
+    const choice = parseDraftTextChoice(text);
+    if (!choice) return false;
+    const team = await getTeam(ctx.db, day, user.id);
+    if (!team) {
+      await reply(ctx, msg, "Sinulla ei ole draftia tähän mättöön. Odota botin viestiä tai lähetä /matto.");
+      return true;
+    }
+    const result = await applyDraftChoice(ctx, settings, user.id, day, choice, null);
+    await reply(ctx, msg, result.note);
+    return true;
   }
-  const ballot = await getBallot(ctx.db, day, cq.from.id);
-  if (!ballot) {
-    await answer("Sinulla ei ole äänestyslippua.");
-    return;
+
+  if (parseVoteResetText(text)) {
+    await ctx.db
+      .prepare("INSERT INTO matto_ballots (day, voter_id, ballot_message_id, cursor, updated_at) VALUES (?, ?, NULL, 0, NULL) ON CONFLICT DO NOTHING")
+      .bind(day, user.id)
+      .run();
+    const result = await applyVoteReset(ctx, settings, user.id, day);
+    await reply(ctx, msg, result.note);
+    return true;
   }
+
+  const ballot = await getBallot(ctx.db, day, user.id);
   const matchups = await matchupsFor(ctx.db, day);
+  if (!ballot || matchups.length === 0) return false;
   if (isBallotComplete(ballot.cursor, matchups.length)) {
-    await answer("Äänesi on jo tallessa. Paina ”Aloita alusta”, jos haluat vaihtaa.");
-    return;
-  }
-  const current = matchups[ballot.cursor];
-  if (!current || current.id !== matchupId) {
-    await answer("Tämä ottelu ei ole vuorossa.");
-    return;
-  }
-  if (choice !== current.team_a && choice !== current.team_b) {
-    await answer("Virheellinen valinta.");
-    return;
+    // Only claim "matto" if it looks like a vote/reset attempt; otherwise let other handlers run.
+    if (parseDraftTextChoice(text) || normalizeMattoText(text).length <= 12) {
+      const t = normalizeMattoText(text);
+      if (TEAM_LABELS.some((l) => l.toLowerCase() === t) || ["a", "b", "1", "2"].includes(t)) {
+        await reply(ctx, msg, "Äänesi on jo tallessa. Vastaa <code>alusta</code>, jos haluat vaihtaa.");
+        return true;
+      }
+    }
+    return false;
   }
 
-  await ctx.db
-    .prepare(
-      `INSERT INTO matto_votes (matchup_id, voter_id, choice, updated_at) VALUES (?, ?, ?, ?)
-       ON CONFLICT(matchup_id, voter_id) DO UPDATE SET choice = excluded.choice, updated_at = excluded.updated_at`,
-    )
-    .bind(matchupId, cq.from.id, choice, ctx.now.toISOString())
-    .run();
-  const nextCursor = ballot.cursor + 1;
-  await ctx.db
-    .prepare("UPDATE matto_ballots SET cursor = ?, ballot_message_id = ?, updated_at = ? WHERE day = ? AND voter_id = ?")
-    .bind(nextCursor, cq.message?.message_id ?? ballot.ballot_message_id, ctx.now.toISOString(), day, cq.from.id)
-    .run();
+  const current = matchups[ballot.cursor]!;
+  const teams = await teamsFor(ctx.db, day);
+  const labels = await labelMap(teams.filter((t) => t.completed_at));
+  const labelA = labels.get(current.team_a)?.toLowerCase() ?? "";
+  const labelB = labels.get(current.team_b)?.toLowerCase() ?? "";
+  const t = normalizeMattoText(text);
 
-  await answer("Ääni tallessa.");
-  await sendMattoBallot(ctx, settings, day, cq.from.id);
-
-  const wasComplete = isBallotComplete(ballot.cursor, matchups.length);
-  const nowComplete = isBallotComplete(nextCursor, matchups.length);
-  if (wasComplete === nowComplete) return;
-  await refreshGroupStatus(ctx, settings, day);
-  if (!nowComplete) return;
-
-  const ballots = await ballotsFor(ctx.db, day);
-  if (ballots.every((b) => isBallotComplete(b.cursor, matchups.length))) {
-    await closeMatto(ctx, settings, day, false);
+  let choice: number | null = null;
+  if (t === labelA || t === "a" || t === "1") choice = current.team_a;
+  else if (t === labelB || t === "b" || t === "2") choice = current.team_b;
+  else {
+    // Typed a known team label that isn't in this matchup
+    for (const [playerId, label] of labels) {
+      if (label.toLowerCase() === t) {
+        await reply(
+          ctx,
+          msg,
+          `Tässä ottelussa ovat <b>${escapeHtml(labels.get(current.team_a) ?? "?")}</b> ja <b>${escapeHtml(labels.get(current.team_b) ?? "?")}</b>.`,
+        );
+        return true;
+      }
+    }
+    return false;
   }
+
+  const result = await applyVoteChoice(ctx, settings, user.id, day, choice, null);
+  await reply(ctx, msg, result.note);
+  return true;
 }
 
 // ---------- commands ----------
@@ -1151,7 +1268,13 @@ export async function mattoCommand(ctx: Ctx, msg: Message, user: User, settings:
         .bind(day, user.id)
         .run();
       const ok = await sendDraftCard(ctx, day, user.id);
-      await reply(ctx, msg, ok ? "Lähetin uuden draft-viestin nappeineen." : "En saanut lähetettyä draftia. Paina Start ja yritä uudelleen.");
+      await reply(
+        ctx,
+        msg,
+        ok
+          ? "Lähetin draft-viestin. Jos et näe nappeja, vastaa <code>pidä</code> tai <code>ohita</code>."
+          : "En saanut lähetettyä draftia. Paina Start ja yritä uudelleen.",
+      );
       return;
     }
     await ctx.db
