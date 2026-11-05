@@ -7,6 +7,7 @@ import {
   buildMatchups,
   canSkip,
   isBallotComplete,
+  matchupsForVoter,
   mattoPercent,
   mattoScores,
   mustKeep,
@@ -134,15 +135,16 @@ describe("matto pure helpers", () => {
       { id: 2, teamA: 1, teamB: 3 },
       { id: 3, teamA: 2, teamB: 3 },
     ];
+    // 3 teams → 1 eligible voter per matchup (everyone except the two playing)
     const votes = [
-      { matchupId: 1, choice: 1 },
       { matchupId: 1, choice: 1 },
       { matchupId: 2, choice: 1 },
       { matchupId: 3, choice: 2 },
     ];
-    const scores = mattoScores([1, 2, 3], matchups, votes, 2);
-    expect(scores.get(1)).toEqual({ points: 3, max: 4 });
-    expect(mattoPercent(scores.get(1)!)).toBe(75);
+    const scores = mattoScores([1, 2, 3], matchups, votes);
+    expect(scores.get(1)).toEqual({ points: 2, max: 2 });
+    expect(mattoPercent(scores.get(1)!)).toBe(100);
+    expect(matchupsForVoter(matchups, 1)).toEqual([{ id: 3, teamA: 2, teamB: 3 }]);
     expect(isBallotComplete(3, 3)).toBe(true);
     expect(isBallotComplete(2, 3)).toBe(false);
   });
@@ -225,9 +227,12 @@ describe("matto flow", () => {
     expect(matchups?.n).toBe(6);
 
     const ballot = tg.sentTo(ben.id).find((c) => String(c.params.text).includes("äänestys"));
-    expect(ballot?.params.text).toContain("Teema on salainen");
+    expect(ballot?.params.text).toContain("<b>Teema:</b>");
+    expect(ballot?.params.text).not.toContain("Teema on salainen");
     expect(ballot?.params.text).not.toContain(anna.first_name);
     expect(ballot?.params.text).toMatch(/Vastaa <code>.+<\/code> tai <code>.+<\/code>/);
+    // 4 players → each judges 3 matchups (not their own)
+    expect(ballot?.params.text).toContain("Ottelu 1/3");
   });
 
   it("accepts votes as plain team-label text", async () => {
@@ -236,7 +241,7 @@ describe("matto flow", () => {
     for (const p of PLAYERS) await draftFive(p);
 
     for (const p of PLAYERS) {
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < 3; i++) {
         const ballot = [...tg.calls]
           .reverse()
           .find(
@@ -263,7 +268,7 @@ describe("matto flow", () => {
 
     for (const p of PLAYERS) {
       const messageId = firstBallotMessageId(p.id);
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < 3; i++) {
         const ballot = latestKeyboard(p.id);
         const pick = (ballot.params.reply_markup.inline_keyboard as { callback_data: string }[][])
           .flat()

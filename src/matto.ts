@@ -1,7 +1,7 @@
 // Daily Mättö: each player drafts 5 characters from a personal deal of 10 (5 strong + 5 weak,
-// shuffled). Then anonymous round-robin voting under one hidden theme for the day. Contests start
-// on a random weekday or when someone sends /matto in the group. Placements use category "matto"
-// and never feed the daily overall score.
+// shuffled). Then anonymous round-robin 1v1 voting under one revealed day theme. You don't vote
+// on matchups involving your own team. Contests start on a random weekday or via /matto.
+// Placements use category "matto" and never feed the daily overall score.
 
 import { dayIsClosed, isGroupMember, reply, sendToGroup, today, tryCall, type Ctx } from "./chat";
 import { allPlayers, savePlacements, upsertPlayer, type Settings } from "./db";
@@ -67,13 +67,28 @@ export interface MattoScore {
   max: number;
 }
 
-/** One point per vote received. Max = matchups involving the team × number of voters. */
+/** Matchups a voter may judge: round-robin pairs that don't include their own team. */
+export function matchupsForVoter<T extends { teamA: number; teamB: number } | { team_a: number; team_b: number }>(
+  matchups: readonly T[],
+  voterId: number,
+): T[] {
+  return matchups.filter((m) => {
+    if ("teamA" in m) return m.teamA !== voterId && m.teamB !== voterId;
+    return m.team_a !== voterId && m.team_b !== voterId;
+  });
+}
+
+/**
+ * One point per vote received. Max = matchups involving the team × eligible voters per matchup
+ * (everyone except the two teams playing).
+ */
 export function mattoScores(
   teams: readonly number[],
   matchups: readonly { id: number; teamA: number; teamB: number }[],
   votes: readonly { matchupId: number; choice: number }[],
-  voterCount: number,
+  eligibleVotersPerMatchup?: number,
 ): Map<number, MattoScore> {
+  const perMatchup = eligibleVotersPerMatchup ?? Math.max(0, teams.length - 2);
   const points = new Map<number, number>();
   for (const id of teams) points.set(id, 0);
   for (const v of votes) points.set(v.choice, (points.get(v.choice) ?? 0) + 1);
@@ -85,7 +100,7 @@ export function mattoScores(
   }
   const out = new Map<number, MattoScore>();
   for (const id of teams) {
-    const max = (games.get(id) ?? 0) * voterCount;
+    const max = (games.get(id) ?? 0) * perMatchup;
     out.set(id, { points: points.get(id) ?? 0, max });
   }
   return out;
@@ -98,6 +113,10 @@ export function mattoPercent(s: MattoScore): number {
 
 export function isBallotComplete(cursor: number, matchupCount: number): boolean {
   return matchupCount > 0 && cursor >= matchupCount;
+}
+
+export function isVoterBallotDone(cursor: number, allMatchups: MatchupRow[], voterId: number): boolean {
+  return isBallotComplete(cursor, matchupsForVoter(allMatchups, voterId).length);
 }
 
 // ---------- data ----------
@@ -347,7 +366,7 @@ function renderDraftDone(day: string, names: string[]): string {
     `Joukkueesi (${KEEP_COUNT}):`,
     ...names.map((n) => `• ${escapeHtml(n)}`),
     "",
-    "Äänestys alkaa, kun kaikki ovat valinneet (tai draftin deadline menee umpeen). Joukkueet pysyvät anonyymeinä äänestyksen ajan.",
+    "Äänestys alkaa, kun kaikki ovat valinneet (tai draftin deadline menee umpeen). Teema paljastuu äänestyksessä; et äänestä oman joukkueesi otteluita.",
   ].join("\n");
 }
 
@@ -358,16 +377,17 @@ function renderAnnouncement(botUsername: string | null, startedByName: string | 
     `⚔️ <b>Daily Mättö alkaa!</b>`,
     "",
     `${who} mättö-pelin. Jokainen saa yksityisviestinä 10 hahmoa yksi kerrallaan — pidä tai ohita, kunnes joukkueessa on ${KEEP_COUNT}.`,
-    `Puolet tarjouksista on vahvoja, puolet heikkoja (järjestys sekoitettu). Teema paljastuu vasta tuloksissa.`,
+    `Puolet tarjouksista on vahvoja, puolet heikkoja (järjestys sekoitettu).`,
     "",
     `Draft ja äänestys toimivat myös ilman nappeja: vastaa botille <code>pidä</code>/<code>ohita</code>, äänestyksessä joukkueen nimellä (esim. <code>Alfa</code>).`,
-    `Draft päättyy klo ${DRAFT_DEADLINE} (tai heti kun kaikki ovat valmiita). Äänestys käydään anonyymisti yksityisviesteissä.`,
+    `Draft päättyy klo ${DRAFT_DEADLINE} (tai heti kun kaikki ovat valmiita). Äänestyksessä teema paljastuu; et äänestä oman joukkueesi otteluita.`,
     `Jos et ole avannut ${bot} yksityisesti, avaa ja paina Start.`,
   ].join("\n");
 }
 
 function renderBallot(opts: {
   day: string;
+  theme: string;
   cursor: number;
   matchups: MatchupRow[];
   labels: Map<number, string>;
@@ -375,13 +395,19 @@ function renderBallot(opts: {
 }): { text: string; keyboard: InlineKeyboardButton[][] } {
   const lines = [
     `⚔️ <b>Daily Mättö</b> · äänestys · ${opts.day}`,
-    "<i>Teema on salainen. Joukkueiden omistajat paljastetaan tuloksissa.</i>",
+    `<b>Teema:</b> ${escapeHtml(opts.theme)}`,
+    "<i>Joukkueiden omistajat paljastetaan tuloksissa. Et äänestä otteluita, joissa oma joukkueesi on mukana.</i>",
     "",
     "<b>Joukkueet</b>",
   ];
   for (const [playerId, label] of [...opts.labels.entries()].sort((a, b) => a[1].localeCompare(b[1], "fi"))) {
     const chars = opts.roster.get(playerId) ?? [];
     lines.push(`• <b>${escapeHtml(label)}</b>: ${chars.map(escapeHtml).join(", ")}`);
+  }
+
+  if (opts.matchups.length === 0) {
+    lines.push("", "Ei äänestettäviä otteluita (tarvitaan vähintään 3 joukkuetta).");
+    return { text: lines.join("\n"), keyboard: [] };
   }
 
   if (isBallotComplete(opts.cursor, opts.matchups.length)) {
@@ -394,7 +420,7 @@ function renderBallot(opts: {
   const labelA = opts.labels.get(m.team_a) ?? "?";
   const labelB = opts.labels.get(m.team_b) ?? "?";
   lines.push("", `<b>Ottelu ${opts.cursor + 1}/${opts.matchups.length}</b>: ${escapeHtml(labelA)} vs ${escapeHtml(labelB)}`);
-  lines.push("Kumpi voittaa päivän salaisessa haasteessa?");
+  lines.push(`Kumpi pärjää paremmin: <i>${escapeHtml(opts.theme)}</i>`);
   lines.push(`Vastaa <code>${escapeHtml(labelA)}</code> tai <code>${escapeHtml(labelB)}</code> (tai <code>a</code>/<code>b</code>). Alusta: <code>alusta</code>.`);
   return {
     text: lines.join("\n"),
@@ -410,6 +436,7 @@ function renderBallot(opts: {
 
 function renderVoteStatus(opts: {
   day: string;
+  theme?: string | null;
   voters: { id: number; done: boolean }[];
   unreachable: number[];
   names: Map<number, string>;
@@ -442,14 +469,15 @@ function renderVoteStatus(opts: {
     ? [`⚔️ <b>Daily Mättö</b> · äänestys päättyi · ${opts.day}`]
     : [
         `⚔️ <b>Daily Mättö</b> · äänestys käynnissä · ${opts.day}`,
-        `Teema on salainen. Joukkueet anonyymejä. Äänestys päättyy, kun kaikki ovat äänestäneet, viimeistään ${closesLabel(opts.closeTime)}.`,
-      ];
+        opts.theme ? `<b>Teema:</b> ${escapeHtml(opts.theme)}` : "",
+        `Joukkueet anonyymejä; et äänestä oman joukkueesi otteluita. Äänestys päättyy, kun kaikki ovat äänestäneet, viimeistään ${closesLabel(opts.closeTime)}.`,
+      ].filter(Boolean);
   lines.push("", `Äänestäneet (${done.length}/${opts.voters.length}): ${done.length ? done.map((v) => nameOf(opts.names, v.id)).join(", ") : "–"}`);
   if (!opts.closed && opts.unreachable.length > 0) {
     const bot = opts.botUsername ? `@${escapeHtml(opts.botUsername)}` : "minut";
     lines.push(
       "",
-      `⚠️ En saanut lähetettyä äänestyslippua: ${opts.unreachable.map((id) => nameOf(opts.names, id)).join(", ")}. Avaa ${bot}, paina Start ja lähetä /mattoaanesta.`,
+      `⚠️ En saanut lähetettyä äänestyslippua: ${opts.unreachable.map((id) => nameOf(opts.names, id)).join(", ")}. Avaa ${bot}, paina Start ja lähetä /matto.`,
     );
   }
   return lines.join("\n");
@@ -656,7 +684,8 @@ async function refreshGroupStatus(ctx: Ctx, settings: Settings, day: string): Pr
   const phase = row.vote_opened_at ? "vote" : "draft";
   const text = renderVoteStatus({
     day,
-    voters: ballots.map((b) => ({ id: b.voter_id, done: isBallotComplete(b.cursor, matchups.length) })),
+    theme: phase === "vote" ? row.theme_text : null,
+    voters: ballots.map((b) => ({ id: b.voter_id, done: isVoterBallotDone(b.cursor, matchups, b.voter_id) })),
     unreachable:
       phase === "vote"
         ? ballots.filter((b) => b.ballot_message_id === null).map((b) => b.voter_id)
@@ -740,9 +769,14 @@ export async function openMattoVote(ctx: Ctx, settings: Settings, day: string): 
   if (claimed.meta.changes === 0) return;
 
   const teams = (await teamsFor(ctx.db, day)).filter((t) => t.completed_at);
-  if (teams.length < 2) {
+  // Need 3+ teams: round-robin without voting on your own matchups leaves nothing with only 2.
+  if (teams.length < 3) {
     await closeMatto(ctx, settings, day, true);
-    await sendToGroup(ctx, settings, `⚔️ Daily Mättö (${day}): alle kaksi joukkuetta valmistui, joten äänestystä ei järjestetä.`);
+    await sendToGroup(
+      ctx,
+      settings,
+      `⚔️ Daily Mättö (${day}): äänestykseen tarvitaan vähintään 3 valmista joukkuetta (nyt ${teams.length}), joten äänestystä ei järjestetä.`,
+    );
     return;
   }
 
@@ -780,15 +814,22 @@ async function labelMap(teams: TeamRow[]): Promise<Map<number, string>> {
 }
 
 async function sendMattoBallot(ctx: Ctx, settings: Settings, day: string, voterId: number): Promise<boolean> {
-  const [ballot, matchups, teams] = await Promise.all([getBallot(ctx.db, day, voterId), matchupsFor(ctx.db, day), teamsFor(ctx.db, day)]);
-  if (!ballot) return false;
+  const [ballot, matchups, teams, dayRow] = await Promise.all([
+    getBallot(ctx.db, day, voterId),
+    matchupsFor(ctx.db, day),
+    teamsFor(ctx.db, day),
+    getMattoDay(ctx.db, day),
+  ]);
+  if (!ballot || !dayRow) return false;
   const finished = teams.filter((t) => t.completed_at);
   const labels = await labelMap(finished);
   const roster = await rosterMap(ctx.db, day, finished.map((t) => t.player_id));
+  const mine = matchupsForVoter(matchups, voterId);
   const { text, keyboard } = renderBallot({
     day,
+    theme: dayRow.theme_text,
     cursor: ballot.cursor,
-    matchups,
+    matchups: mine,
     labels,
     roster,
   });
@@ -849,13 +890,10 @@ async function closeMatto(ctx: Ctx, settings: Settings, day: string, cancelled: 
 
   const finished = teams.filter((t) => t.completed_at && t.label);
   const teamIds = finished.map((t) => t.player_id);
-  const ballots = await ballotsFor(ctx.db, day);
-  const voterCount = ballots.length;
   const scores = mattoScores(
     teamIds,
     matchups.map((m) => ({ id: m.id, teamA: m.team_a, teamB: m.team_b })),
     votes.map((v) => ({ matchupId: v.matchup_id, choice: v.choice })),
-    voterCount,
   );
   const counted = new Map([...scores].filter(([, s]) => s.max > 0));
   if (counted.size === 0) {
@@ -1057,10 +1095,11 @@ async function applyVoteChoice(
   const ballot = await getBallot(ctx.db, day, voterId);
   if (!ballot) return { ok: false, note: "Sinulla ei ole äänestyslippua. Lähetä /matto." };
   const matchups = await matchupsFor(ctx.db, day);
-  if (isBallotComplete(ballot.cursor, matchups.length)) {
+  const mine = matchupsForVoter(matchups, voterId);
+  if (isBallotComplete(ballot.cursor, mine.length)) {
     return { ok: false, note: "Äänesi on jo tallessa. Vastaa <code>alusta</code>, jos haluat vaihtaa." };
   }
-  const current = matchups[ballot.cursor];
+  const current = mine[ballot.cursor];
   if (!current) return { ok: false, note: "Äänestys on jo päättynyt." };
   if (expectedMatchupId !== null && current.id !== expectedMatchupId) {
     return { ok: false, note: "Tämä ottelu ei ole vuorossa. Katso uusin äänestysviesti tai lähetä /matto." };
@@ -1084,13 +1123,13 @@ async function applyVoteChoice(
 
   await sendMattoBallot(ctx, settings, day, voterId);
 
-  const wasComplete = isBallotComplete(ballot.cursor, matchups.length);
-  const nowComplete = isBallotComplete(nextCursor, matchups.length);
+  const wasComplete = isBallotComplete(ballot.cursor, mine.length);
+  const nowComplete = isBallotComplete(nextCursor, mine.length);
   if (wasComplete !== nowComplete) {
     await refreshGroupStatus(ctx, settings, day);
     if (nowComplete) {
       const ballots = await ballotsFor(ctx.db, day);
-      if (ballots.every((b) => isBallotComplete(b.cursor, matchups.length))) {
+      if (ballots.every((b) => isVoterBallotDone(b.cursor, matchups, b.voter_id))) {
         await closeMatto(ctx, settings, day, false);
       }
     }
@@ -1202,20 +1241,18 @@ export async function handleMattoText(ctx: Ctx, msg: Message, user: User, text: 
 
   const ballot = await getBallot(ctx.db, day, user.id);
   const matchups = await matchupsFor(ctx.db, day);
+  const mine = matchupsForVoter(matchups, user.id);
   if (!ballot || matchups.length === 0) return false;
-  if (isBallotComplete(ballot.cursor, matchups.length)) {
-    // Only claim "matto" if it looks like a vote/reset attempt; otherwise let other handlers run.
-    if (parseDraftTextChoice(text) || normalizeMattoText(text).length <= 12) {
-      const t = normalizeMattoText(text);
-      if (TEAM_LABELS.some((l) => l.toLowerCase() === t) || ["a", "b", "1", "2"].includes(t)) {
-        await reply(ctx, msg, "Äänesi on jo tallessa. Vastaa <code>alusta</code>, jos haluat vaihtaa.");
-        return true;
-      }
+  if (isBallotComplete(ballot.cursor, mine.length)) {
+    const t = normalizeMattoText(text);
+    if (TEAM_LABELS.some((l) => l.toLowerCase() === t) || ["a", "b", "1", "2"].includes(t)) {
+      await reply(ctx, msg, "Äänesi on jo tallessa. Vastaa <code>alusta</code>, jos haluat vaihtaa.");
+      return true;
     }
     return false;
   }
 
-  const current = matchups[ballot.cursor]!;
+  const current = mine[ballot.cursor]!;
   const teams = await teamsFor(ctx.db, day);
   const labels = await labelMap(teams.filter((t) => t.completed_at));
   const labelA = labels.get(current.team_a)?.toLowerCase() ?? "";
@@ -1226,8 +1263,7 @@ export async function handleMattoText(ctx: Ctx, msg: Message, user: User, text: 
   if (t === labelA || t === "a" || t === "1") choice = current.team_a;
   else if (t === labelB || t === "b" || t === "2") choice = current.team_b;
   else {
-    // Typed a known team label that isn't in this matchup
-    for (const [playerId, label] of labels) {
+    for (const [, label] of labels) {
       if (label.toLowerCase() === t) {
         await reply(
           ctx,
@@ -1365,7 +1401,6 @@ export async function challengeMattoCommand(ctx: Ctx, msg: Message): Promise<voi
       teamIds,
       matchups.map((m) => ({ id: m.id, teamA: m.team_a, teamB: m.team_b })),
       votes.map((v) => ({ matchupId: v.matchup_id, choice: v.choice })),
-      (await ballotsFor(ctx.db, day)).length,
     );
     const counted = new Map([...scores].filter(([, s]) => s.max > 0));
     if (counted.size === 0) {
@@ -1400,7 +1435,8 @@ export async function challengeMattoCommand(ctx: Ctx, msg: Message): Promise<voi
     msg,
     renderVoteStatus({
       day,
-      voters: ballots.map((b) => ({ id: b.voter_id, done: isBallotComplete(b.cursor, matchups.length) })),
+      theme: row.vote_opened_at ? row.theme_text : null,
+      voters: ballots.map((b) => ({ id: b.voter_id, done: isVoterBallotDone(b.cursor, matchups, b.voter_id) })),
       unreachable: [],
       names: displayNames(players),
       closeTime: ctx.closeTime,
