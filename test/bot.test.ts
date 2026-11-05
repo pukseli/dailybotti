@@ -140,17 +140,6 @@ describe("private results", () => {
     }
   });
 
-  it("does not dump full help for unknown or matto-only slash commands", async () => {
-    await linkGroup();
-    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, "/dfdf"));
-    expect(tg.lastTextTo(anna.id)).toContain("Tuntematon komento");
-    expect(tg.lastTextTo(anna.id)).not.toContain("<b>Näin pelaat mukana</b>");
-
-    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, "/alusta"));
-    expect(tg.lastTextTo(anna.id)).toContain("Daily Mättö");
-    expect(tg.lastTextTo(anna.id)).not.toContain("<b>Näin pelaat mukana</b>");
-  });
-
   it("shows the closing time in /help when it isn't midnight", async () => {
     await linkGroup();
     await handleUpdate(makeCtx(tg, FRI_NOON, { closeTime: "22:00" }), dm(anna, "/help"));

@@ -592,17 +592,6 @@ async function privateCommand(ctx: Ctx, msg: Message, user: User, name: string, 
     case "mattotilanne":
       await challengeMattoCommand(ctx, msg);
       return;
-    // Text alternatives for clients without inline buttons (also accept /pida etc.)
-    case "pida":
-    case "pidä":
-    case "keep":
-    case "ohita":
-    case "skip":
-    case "alusta":
-    case "reset":
-      if (await handleMattoText(ctx, msg, user, name, settings)) return;
-      await reply(ctx, msg, "Daily Mättö ei ole käynnissä, tai tuo komento ei sovi tähän vaiheeseen. /matto näyttää tilan.");
-      return;
     case "komennot":
     case "commands":
       await reply(ctx, msg, renderCommands());
@@ -617,12 +606,8 @@ async function privateCommand(ctx: Ctx, msg: Message, user: User, name: string, 
     case "setup":
       await reply(ctx, msg, "Send /setup in the group, not here.");
       return;
-    case "help":
-    case "start":
-      await reply(ctx, msg, renderHelp({ closeTime: ctx.closeTime, timeZone: ctx.timeZone, linked: settings.groupChatId !== null }));
-      return;
     default:
-      await reply(ctx, msg, "Tuntematon komento. /komennot listaa komennot, /help avaa ohjeet.");
+      await reply(ctx, msg, renderHelp({ closeTime: ctx.closeTime, timeZone: ctx.timeZone, linked: settings.groupChatId !== null }));
   }
 }
 
