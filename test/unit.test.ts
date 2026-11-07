@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GAMES, dayForResult, gameTitle, parseResults, parseRoundData, puzzleNumberFor } from "../src/games";
-import { displayNames, escapeHtml } from "../src/render";
+import { displayNames, escapeHtml, renderLeaderboard } from "../src/render";
+import type { StatsRow } from "../src/db";
 import { dayStandings, overallValue, rank } from "../src/scoring";
 import { addDays, dayLabel, isClosed, localParts } from "../src/time";
 import { parseCommand } from "../src/bot";
@@ -286,6 +287,45 @@ describe("scoring", () => {
       { playerId: 2, value: 150, rank: 1 },
       { playerId: 1, value: 100, rank: 2 },
     ]);
+  });
+});
+
+describe("leaderboard medals", () => {
+  const row = (player_id: number, category: StatsRow["category"], gold: number, silver: number, bronze: number): StatsRow => ({
+    player_id,
+    category,
+    played: gold + silver + bronze + 1,
+    gold,
+    silver,
+    bronze,
+    average: 150,
+    best: 200,
+  });
+  const names = new Map([
+    [1, "Allu"],
+    [2, "Könö"],
+  ]);
+
+  it("adds every event's medals together, leaving the daily podium out, and lists Mättö as its own event", () => {
+    const text = renderLeaderboard(
+      [
+        row(1, "overall", 3, 0, 0),
+        row(2, "overall", 0, 3, 0),
+        row(1, "eraly", 2, 1, 0),
+        row(2, "eraly", 1, 2, 0),
+        row(1, "matto", 0, 1, 0),
+        row(2, "matto", 1, 0, 0),
+      ],
+      names,
+    );
+    expect(text).toContain("1. Allu  🥇3 🥈0 🥉0 · 150.0 · 4"); // daily podium, unchanged
+    expect(text).toContain("<b>Mitalit yhteensä</b> <i>(kaikki lajit)</i>\n1. Allu  🥇2 🥈2 🥉0 · 4 kpl\n2. Könö  🥇2 🥈2 🥉0 · 4 kpl");
+    expect(text).toContain("<b>⚔️ Daily Mättö</b>\nKönö  🥇1 🥈0 🥉0\nAllu  🥇0 🥈1 🥉0");
+    expect(text).not.toContain("Krillion"); // no Krillion placements yet
+  });
+
+  it("says when no day has finished yet", () => {
+    expect(renderLeaderboard([], names)).toContain("Ei vielä päättyneitä päiviä.");
   });
 });
 

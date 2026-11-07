@@ -296,7 +296,25 @@ describe("a full day", () => {
     const leaderboard = tg.lastTextTo(GROUP);
     expect(leaderboard).toContain("1. Anna  🥇1 🥈0 🥉0 · 249.0 · 1");
     expect(leaderboard).toContain("2. Chris  🥇0 🥈1 🥉0 · 168.1 · 1");
-    expect(leaderboard).toContain("Krillion: Anna 1 · Chris 1");
+    // Medals from every event added up, then each event on its own. Anna and Chris share the Krillion gold.
+    expect(leaderboard).toContain(
+      "<b>Mitalit yhteensä</b> <i>(kaikki lajit)</i>\n1. Anna  🥇2 🥈1 🥉0 · 3 kpl\n2. Chris  🥇2 🥈0 🥉0 · 2 kpl\n3. Ben  🥇0 🥈1 🥉0 · 1 kpl",
+    );
+    expect(leaderboard).toContain(
+      [
+        "<b>Mitalit lajeittain</b>",
+        "<b>Eraly</b>",
+        "Anna  🥇1 🥈0 🥉0",
+        "Ben  🥇0 🥈1 🥉0",
+        "<b>Krillion</b>",
+        "Anna  🥇1 🥈0 🥉0",
+        "Chris  🥇1 🥈0 🥉0",
+        "<b>Size It Up</b>",
+        "Chris  🥇1 🥈0 🥉0",
+        "Anna  🥇0 🥈1 🥉0",
+      ].join("\n"),
+    );
+    expect(leaderboard).not.toContain("Imitaatio"); // events not held yet are left out
 
     await handleUpdate(makeCtx(tg, SAT_0001), dm(chris, "/me"));
     const me = tg.lastTextTo(chris.id);

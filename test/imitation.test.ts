@@ -239,7 +239,10 @@ describe("a full contest", () => {
     );
 
     await handleUpdate(makeCtx(tg, SAT0900), inGroup(anna, "/leaderboard"));
-    expect(tg.lastTextTo(GROUP)).toContain("🎭 Imitaatio: Ben 1");
+    const leaderboard = tg.lastTextTo(GROUP);
+    expect(leaderboard).toContain("<b>🎭 Imitaatio</b>\nBen  🥇1 🥈0 🥉0\nAnna  🥇0 🥈1 🥉0\nChris  🥇0 🥈0 🥉1");
+    // Imitation medals count towards the total: Anna and Ben both have a gold and a silver.
+    expect(leaderboard).toContain("1. Anna  🥇1 🥈1 🥉0 · 2 kpl\n2. Ben  🥇1 🥈1 🥉0 · 2 kpl");
     await handleUpdate(makeCtx(tg, SAT0900), dm(ben, "/me"));
     expect(tg.lastTextTo(ben.id)).toContain("<b>🎭 Imitaatio</b>: 🥇1 🥈0 🥉0 · avg 100 % · best 100 % · 1 played");
   });

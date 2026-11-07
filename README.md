@@ -6,7 +6,7 @@ A Telegram bot for a group that plays [Eraly](https://eraly.io/), [Krillion](htt
 - Group pastes get a 👍 reaction instead of a reply, so the bot doesn't fill the chat with its own messages.
 - The group gets one **board** per day, edited in place, showing who has played (✅). The board shows no scores.
 - When the day closes (midnight by default), the bot posts the **podiums**: one per game plus an overall one.
-- `/leaderboard` shows all-time medals and averages. `/me` shows your own stats.
+- `/leaderboard` shows the daily podiums with averages, everyone's medal total across all events, and the medals in each event. `/me` shows your own stats.
 
 It runs on Cloudflare Workers with a D1 database, which fits well within the free plan.
 
@@ -123,7 +123,7 @@ The imitation contest is separate from the daily games and podiums; its medals a
 | `/today` | both | Today's board. In the group it moves the board to the bottom of the chat |
 | `/tulos [pelaaja] [peli] [eilen \| YYYY-MM-DD \| #nro]` (or `/tulokset`) | both | Round-by-round breakdown of a player's game results (Eraly, Krillion, Size It Up). While the day is open, you can only view your own results; once closed, anyone's results can be viewed |
 | `/me` | both | Your medals, averages and bests across overall, individual games, and imitation |
-| `/leaderboard` | both | All-time standings and individual game gold medal counts |
+| `/leaderboard` | both | Daily podium medals (from the overall score) with averages, medal totals across all events (the games, imitation and Daily Mättö; the daily podium isn't counted again), and 🥇🥈🥉 per event |
 | `/regressio [pelaaja \| kärki]` | both | Statistical outlier analysis (Hajontakomissio): strips top 20% flukes and generates AI commentary. Without arguments (or `kärki`/`top`) targets the leaderboard leader; with a player name/username targets that player; as a reply to a message analyzes that message's results or its sender |
 | `/vote-leaderboard` (tai `/vote_leaderboard`, `!vote-leaderboard`) | group | Starts a group vote (requires 4 Yes votes) to publish interim standings (`⏱️ Väliaikatilanne`) while keeping the day open |
 | `/vote-leaderboard finalize` (tai `/finalize`, `!vote-leaderboard finalize`) | group | Starts a group vote (requires 4 Yes votes) to close the day early and publish final podiums. Can also be triggered by replying `finalize`, `sulje`, or `lopullinen` to an interim standings message |

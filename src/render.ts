@@ -368,34 +368,61 @@ export function renderPlayerWorstStats(opts: {
   return fit(lines);
 }
 
-export function renderLeaderboard(stats: StatsRow[], names: Map<number, string>): string {
-  const overall = stats
-    .filter((s) => s.category === "overall")
-    .sort((a, b) => b.gold - a.gold || b.silver - a.silver || b.bronze - a.bronze || b.average - a.average);
-  if (overall.length === 0) return "🏆 <b>All-time leaderboard</b>\n\nNo finished days yet. The first podium is posted when today closes.";
+/** Every event that hands out medals, in the order the leaderboard lists them. */
+const MEDAL_EVENTS: { category: Category; label: string }[] = [
+  ...GAMES.map((g) => ({ category: g.id, label: escapeHtml(g.name) })),
+  { category: "imitation", label: "🎭 Imitaatio" },
+  { category: "matto", label: "⚔️ Daily Mättö" },
+];
 
-  const lines = ["🏆 <b>All-time leaderboard</b>", "<i>Daily overall podiums · average score · days played</i>"];
+type Medals = Pick<StatsRow, "gold" | "silver" | "bronze">;
+
+/** Most golds first, then silvers, then bronzes. */
+function byMedals(a: Medals, b: Medals): number {
+  return b.gold - a.gold || b.silver - a.silver || b.bronze - a.bronze;
+}
+
+export function renderLeaderboard(stats: StatsRow[], names: Map<number, string>): string {
+  const overall = stats.filter((s) => s.category === "overall").sort((a, b) => byMedals(a, b) || b.average - a.average);
+  if (overall.length === 0) {
+    return "🏆 <b>Kaikkien aikojen tilanne</b>\n\nEi vielä päättyneitä päiviä. Ensimmäiset palkintopallit julkaistaan, kun päivä päättyy.";
+  }
+  const byName = (a: number, b: number) => nameOf(names, a).localeCompare(nameOf(names, b));
+
+  const lines = [
+    "🏆 <b>Kaikkien aikojen tilanne</b>",
+    "",
+    "<b>Päivän palkintopallit</b> <i>(kokonaispisteistä · keskiarvo · päiviä)</i>",
+  ];
   overall.forEach((s, i) => {
     lines.push(`${i + 1}. ${nameOf(names, s.player_id)}  ${medalCounts(s)} · ${s.average.toFixed(1)} · ${s.played}`);
   });
-  lines.push("", "<b>Game wins</b> 🥇");
-  for (const game of GAMES) {
-    const winners = stats
-      .filter((s) => s.category === game.id && s.gold > 0)
-      .sort((a, b) => b.gold - a.gold || b.silver - a.silver)
-      .map((s) => `${nameOf(names, s.player_id)} ${s.gold}`);
-    lines.push(`${escapeHtml(game.name)}: ${winners.length ? winners.join(" · ") : "–"}`);
+
+  // Every event's medals added up. The daily podium is left out, since it ranks the same games again.
+  const eventStats = stats.filter((s) => MEDAL_EVENTS.some((e) => e.category === s.category));
+  const totals = new Map<number, Medals>();
+  for (const s of eventStats) {
+    const t = totals.get(s.player_id) ?? { gold: 0, silver: 0, bronze: 0 };
+    totals.set(s.player_id, { gold: t.gold + s.gold, silver: t.silver + s.silver, bronze: t.bronze + s.bronze });
   }
-  const imitators = stats
-    .filter((s) => s.category === "imitation" && s.gold > 0)
-    .sort((a, b) => b.gold - a.gold || b.silver - a.silver)
-    .map((s) => `${nameOf(names, s.player_id)} ${s.gold}`);
-  if (stats.some((s) => s.category === "imitation")) lines.push(`🎭 Imitaatio: ${imitators.length ? imitators.join(" · ") : "–"}`);
-  const mattoWinners = stats
-    .filter((s) => s.category === "matto" && s.gold > 0)
-    .sort((a, b) => b.gold - a.gold || b.silver - a.silver)
-    .map((s) => `${nameOf(names, s.player_id)} ${s.gold}`);
-  if (stats.some((s) => s.category === "matto")) lines.push(`⚔️ Daily Mättö: ${mattoWinners.length ? mattoWinners.join(" · ") : "–"}`);
+  lines.push("", "<b>Mitalit yhteensä</b> <i>(kaikki lajit)</i>");
+  [...totals]
+    .sort(([idA, a], [idB, b]) => byMedals(a, b) || byName(idA, idB))
+    .forEach(([id, t], i) => {
+      lines.push(`${i + 1}. ${nameOf(names, id)}  ${medalCounts(t)} · ${t.gold + t.silver + t.bronze} kpl`);
+    });
+
+  lines.push("", "<b>Mitalit lajeittain</b>");
+  for (const event of MEDAL_EVENTS) {
+    const rows = eventStats.filter((s) => s.category === event.category);
+    if (rows.length === 0) continue; // not held yet
+    lines.push(`<b>${event.label}</b>`);
+    const medalists = rows
+      .filter((s) => s.gold + s.silver + s.bronze > 0)
+      .sort((a, b) => byMedals(a, b) || byName(a.player_id, b.player_id));
+    if (medalists.length === 0) lines.push("–");
+    for (const s of medalists) lines.push(`${nameOf(names, s.player_id)}  ${medalCounts(s)}`);
+  }
   return fit(lines);
 }
 
