@@ -90,6 +90,48 @@ describe("parseResults", () => {
     });
   });
 
+  it("reads Size It Up with iOS variation selectors (\\uFE0F) and circles", () => {
+    const textIos = [
+      "Magnitudle — Size It Up",
+      "2026-11-09",
+      "",
+      "Score: 398/500",
+      "",
+      "🟥🟥🟥🟥🟥 100",
+      "🟥🟥🟥🟥⬜\uFE0F 85",
+      "🟥🟥🟥🟥⬜\uFE0F 75",
+      "🟥🟥🟥⬜\uFE0F⬜\uFE0F 68",
+      "🟥🟥🟥⬜\uFE0F⬜\uFE0F 70",
+      "",
+      "https://magnitudle.com/size-it-up",
+    ].join("\n");
+    expect(parseResults(textIos).results).toEqual([{ game: "sizeitup", puzzle: null, score: 398 }]);
+    expect(parseRoundData(textIos, "sizeitup")).toEqual({
+      rounds: [100, 85, 75, 68, 70],
+      rawText: textIos,
+    });
+
+    const textCircles = [
+      "Magnitudle — Size It Up",
+      "2026-11-09",
+      "",
+      "Score: 350/500",
+      "",
+      "🔴🔴🔴🔴🔴 100",
+      "🔴🔴🔴🔴⚪\uFE0F 80",
+      "🔴🔴🔴⚪\uFE0F⚪\uFE0F 60",
+      "🔴🔴🔴⚪\uFE0F⚪\uFE0F 60",
+      "🔴🔴⚪\uFE0F⚪\uFE0F⚪\uFE0F 50",
+      "",
+      "https://magnitudle.com/size-it-up",
+    ].join("\n");
+    expect(parseResults(textCircles).results).toEqual([{ game: "sizeitup", puzzle: null, score: 350 }]);
+    expect(parseRoundData(textCircles, "sizeitup")).toEqual({
+      rounds: [100, 80, 60, 60, 50],
+      rawText: textCircles,
+    });
+  });
+
   it("reads Size It Up when the share sheet repeats the title", () => {
     expect(parseResults(`Size It Up\n\n${sizeItUpShare(300)}`).results).toEqual([{ game: "sizeitup", puzzle: null, score: 300 }]);
   });

@@ -1193,6 +1193,23 @@ async function recordResults(ctx: Ctx, user: User, results: ParsedResult[], rawI
     }
     const existing = await getResult(ctx.db, user.id, r.game, day);
     if (existing?.score === r.score) {
+      let existingCount = 0;
+      if (existing.rounds_json) {
+        try {
+          existingCount = (JSON.parse(existing.rounds_json) as unknown[]).length;
+        } catch {
+          // ignore
+        }
+      }
+      const newCount = roundData.rounds?.length ?? 0;
+      if (newCount > existingCount) {
+        await ctx.db
+          .prepare("UPDATE results SET rounds_json = ?, raw_text = ? WHERE player_id = ? AND game = ? AND day = ?")
+          .bind(roundData.rounds ? JSON.stringify(roundData.rounds) : null, roundData.rawText, user.id, r.game, day)
+          .run();
+        saved.push(`✅ ${title}: ${r.score}/${game.max} kierrostiedot päivitetty.`);
+        continue;
+      }
       saved.push(`☑️ ${title} was already saved (${r.score}/${game.max}).`);
     } else {
       problems.push(`ℹ️ You already sent ${title} (${existing?.score}/${game.max}). Only the first result counts.`);

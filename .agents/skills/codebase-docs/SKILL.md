@@ -179,7 +179,7 @@ All parsing logic lives in [`src/games.ts`](file:///c:/Users/akseli/git/dailybot
   ```
 - **Regex:** `(?:^|\n)[ \t]*(?:Magnitudle[ \t]*[—–-][ \t]*)?Size It Up[ \t]*(?:\n[ \t]*\d{4}-\d{2}-\d{2}[ \t]*)?\n\s*(?:Overall Score|Score:?)[ \t]*(\d+(?:[.,]\d+)?)(?:\s*\/\s*500)?(?!\d)`
 - **Rejections:** Pop Culture, Geography, Unlimited, Practice, Archive modes are rejected.
-- **Round Breakdown:** Extracted per-round scores `[🟥⬜]{5} \d+` into JSON array.
+- **Round Breakdown:** Extracted per-round scores (supporting variation selectors `\uFE0F`, non-breaking spaces and circles/squares `[🟥🔴⬜⚪◻◽▫]`) into JSON array.
 
 ---
 

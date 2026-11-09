@@ -86,12 +86,18 @@ const KRILLION_BLOCK =
 // "Magnitudle — Size It Up\n2026-11-04\n\nScore: 437/500\n\n🟥🟥🟥🟥⬜ 85\n...\n\nhttps://magnitudle.com/size-it-up"
 // Pop Culture, Geography, Unlimited and Archive have different titles or suffixes and don't match.
 const SIZE_IT_UP =
-  /(?:^|\n)[ \t]*(?:Magnitudle[ \t]*[—–-][ \t]*)?Size It Up[ \t]*(?:\n[ \t]*\d{4}-\d{2}-\d{2}[ \t]*)?\n\s*(?:Overall Score|Score:?)[ \t]*(\d+(?:[.,]\d+)?)(?:\s*\/\s*500)?(?!\d)/;
+  /(?:^|\n)[^\S\n]*(?:Magnitudle[^\S\n]*[—–-][^\S\n]*)?Size It Up[^\S\n]*(?:\n[^\S\n]*\d{4}-\d{2}-\d{2}[^\S\n]*)?\n\s*(?:Overall Score|Score:?)[^\S\n]*(\d+(?:[.,]\d+)?)(?:\s*\/\s*500)?(?!\d)/;
 const SIZE_IT_UP_OTHER =
-  /(?:Size It Up[^\n]*\S[^\n]*\n\s*(?:Overall Score|Score:?)|Size It Up[^\n]*\n[ \t]*\d{4}-\d{2}-\d{2}[ \t]*·|Magnitudle[ \t]*[—–-][ \t]*Size It Up[^\n]*\S[^\n]*\n|Size It Up Archive|Size It Up Unlimited)/i;
-const SIZE_IT_UP_BLOCK =
-  /(?:^|\n)[ \t]*((?:(?:Magnitudle[ \t]*[—–-][ \t]*)?Size It Up[ \t]*(?:\n[ \t]*\d{4}-\d{2}-\d{2}[ \t]*)?\n\s*(?:Overall Score|Score:?)[ \t]*\d+(?:[.,]\d+)?(?:\s*\/\s*500)?(?!\d))(?:\n[ \t]*\n((?:[ \t]*[🟥⬜]{5}[ \t]+\d+(?:[.,]\d+)?\*?[ \t]*(?:\n|$))+))?(?:\n?[ \t]*\*[^\n]*)?(?:\n?[ \t]*\n?[ \t]*https?:\/\/magnitudle\.com\/size-it-up\S*)?)/u;
-const SIZE_IT_UP_ROUND = /[🟥⬜]{5}[ \t]+(\d+(?:[.,]\d+)?)\*?/gu;
+  /(?:Size It Up[^\n]*\S[^\n]*\n\s*(?:Overall Score|Score:?)|Size It Up[^\n]*\n[^\S\n]*\d{4}-\d{2}-\d{2}[^\S\n]*·|Magnitudle[^\S\n]*[—–-][^\S\n]*Size It Up[^\n]*\S[^\n]*\n|Size It Up Archive|Size It Up Unlimited)/i;
+const SIZE_IT_UP_ELEM = "(?:[🟥🔴⬜⚪◻◽▫]\\uFE0F?)";
+const SIZE_IT_UP_ROW = `(?:[^\\S\\n]*${SIZE_IT_UP_ELEM}{5}[^\\S\\n]+(?:\\d+(?:[.,]\\d+)?)\\*?[^\\S\\n]*(?:\\n|$))`;
+const SIZE_IT_UP_BLOCK = new RegExp(
+  `(?:^|\\n)[^\\S\\n]*((?:(?:Magnitudle[^\\S\\n]*[—–-][^\\S\\n]*)?Size It Up[^\\S\\n]*(?:\\n[^\\S\\n]*\\d{4}-\\d{2}-\\d{2}[^\\S\\n]*)?\\n\\s*(?:Overall Score|Score:?)[^\\S\\n]*\\d+(?:[.,]\\d+)?(?:\\s*/\\s*500)?(?!\\d))` +
+    `(?:\\n(?:[^\\S\\n]*\\n)?(${SIZE_IT_UP_ROW}+))?` +
+    `(?:\n?[^\\S\\n]*\\*[^\n]*)?` +
+    `(?:\n?[^\\S\\n]*\n?[^\\S\\n]*https?:\\/\\/magnitudle\\.com\\/size-it-up\\S*)?)`,
+  "u",
+);
 
 const graphemeSegmenter = new Intl.Segmenter();
 
@@ -155,11 +161,13 @@ export function parseRoundData(input: string, game: GameId): RoundData {
   if (!m) return { rounds: null, rawText: null };
   const roundsBlock = m[2];
   const rounds = roundsBlock
-    ? [...roundsBlock.matchAll(SIZE_IT_UP_ROUND)].map((r) => Math.round(Number(r[1]!.replace(",", "."))))
+    ? [...roundsBlock.matchAll(new RegExp(`${SIZE_IT_UP_ELEM}{5}[^\\S\\n]+(\\d+(?:[.,]\\d+)?)\\*?`, "gu"))].map((r) =>
+        Math.round(Number(r[1]!.replace(",", "."))),
+      )
     : null;
   return {
     rounds: rounds && rounds.length > 0 ? rounds : null,
-    rawText: m[1]!.trim(),
+    rawText: m[1] ? m[1].trim() : null,
   };
 }
 

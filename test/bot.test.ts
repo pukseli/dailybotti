@@ -1067,6 +1067,67 @@ describe("/tulos", () => {
     expect(text).toContain("🟨🟩🟦🟧🟥🟨💤");
     expect(text).toContain("1. 🟨 100p · 2. 🟩 60p · 3. 🟦 85p · 4. 🟧 30p · 5. 🟥 10p · 6. 🟨 100p · 7. 💤 0p");
   });
+
+  it("handles Size It Up with iOS variation selectors and allows updating incomplete rounds", async () => {
+    await linkGroup();
+    const sizeIos = [
+      "Magnitudle — Size It Up",
+      "2026-10-23",
+      "",
+      "Score: 398/500",
+      "",
+      "🟥🟥🟥🟥🟥 100",
+      "🟥🟥🟥🟥⬜\uFE0F 85",
+      "🟥🟥🟥🟥⬜\uFE0F 75",
+      "🟥🟥🟥⬜\uFE0F⬜\uFE0F 68",
+      "🟥🟥🟥⬜\uFE0F⬜\uFE0F 70",
+      "",
+      "https://magnitudle.com/size-it-up",
+    ].join("\n");
+
+    // Anna submits Size It Up with iOS emojis
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, sizeIos));
+    tg.clear();
+
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, "/tulos size it up"));
+    const annaSize = tg.lastTextTo(anna.id);
+    expect(annaSize).toContain("<b>Size It Up</b> · 398/500");
+    expect(annaSize).toContain("1. 🟥🟥🟥🟥🟥 100");
+    expect(annaSize).toContain("2. 🟥🟥🟥🟥⬜ 85");
+    expect(annaSize).toContain("3. 🟥🟥🟥🟥⬜ 75");
+    expect(annaSize).toContain("4. 🟥🟥🟥⬜⬜ 68");
+    expect(annaSize).toContain("5. 🟥🟥🟥⬜⬜ 70");
+
+    // If result was previously saved with only 1 round in rounds_json, re-pasting full rounds updates it
+    tg.clear();
+    const truncated = [
+      "Magnitudle — Size It Up",
+      "2026-10-23",
+      "",
+      "Score: 300/500",
+      "",
+      "🟥🟥🟥🟥🟥 100",
+    ].join("\n");
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, truncated));
+    tg.clear();
+
+    const fullBen = [
+      "Magnitudle — Size It Up",
+      "2026-10-23",
+      "",
+      "Score: 300/500",
+      "",
+      "🟥🟥🟥🟥🟥 100",
+      "🟥🟥🟥⬜\uFE0F⬜\uFE0F 50",
+      "🟥🟥🟥⬜\uFE0F⬜\uFE0F 50",
+      "🟥🟥🟥⬜\uFE0F⬜\uFE0F 50",
+      "🟥🟥🟥⬜\uFE0F⬜\uFE0F 50",
+      "",
+      "https://magnitudle.com/size-it-up",
+    ].join("\n");
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, fullBen));
+    expect(tg.lastTextTo(ben.id)).toContain("kierrostiedot päivitetty");
+  });
 });
 
 describe("animepiste", () => {

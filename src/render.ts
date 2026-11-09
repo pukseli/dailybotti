@@ -523,27 +523,26 @@ export function renderPlayerDayResults(opts: {
         ? res.raw_text
             .split("\n")
             .map((l) => l.trim())
-            .filter((l) => /^[🟥⬜]{5}\s+\d+(?:[.,]\d+)?\*?$/.test(l))
+            .filter((l) => /^(?:[🟥🔴⬜⚪◻◽▫]\uFE0F?){5}[^\S\n]+\d+(?:[.,]\d+)?\*?$/u.test(l))
         : [];
-      if (rawRoundLines.length > 0) {
+      const storedRounds = parseStoredRounds(res);
+      if (rawRoundLines.length >= (storedRounds?.length ?? 1) && rawRoundLines.length > 0) {
         rawRoundLines.forEach((l, idx) => {
-          lines.push(`${idx + 1}. ${escapeHtml(l)}`);
+          const normalized = l.replace(/\uFE0F/g, "");
+          lines.push(`${idx + 1}. ${escapeHtml(normalized)}`);
         });
         const noteLine = res.raw_text
           ?.split("\n")
           .map((l) => l.trim())
           .find((l) => l.startsWith("*"));
         if (noteLine) lines.push(`<i>${escapeHtml(noteLine)}</i>`);
-      } else {
-        const rounds = parseStoredRounds(res);
-        if (rounds && rounds.length > 0) {
-          rounds.forEach((val, idx) => {
-            const num = Number(val);
-            const reds = Math.max(0, Math.min(5, Math.round(num / 20)));
-            const bar = "🟥".repeat(reds) + "⬜".repeat(5 - reds);
-            lines.push(`${idx + 1}. ${bar} ${num}`);
-          });
-        }
+      } else if (storedRounds && storedRounds.length > 0) {
+        storedRounds.forEach((val, idx) => {
+          const num = Number(val);
+          const reds = Math.max(0, Math.min(5, Math.round(num / 20)));
+          const bar = "🟥".repeat(reds) + "⬜".repeat(5 - reds);
+          lines.push(`${idx + 1}. ${bar} ${num}`);
+        });
       }
     } else if (game.id === "eraly") {
       const rounds = parseStoredRounds(res);
