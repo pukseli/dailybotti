@@ -19,6 +19,7 @@ export const PRIVATE_COMMANDS = [
   { command: "mattoaanesta", description: "Daily Mättö -äänestyslippu" },
   { command: "mattotilanne", description: "Daily Mättö -tilanne" },
   { command: "mattonollaa", description: "Nollaa päivän Daily Mättö (ryhmässä)" },
+  { command: "animepiste", description: "Animepisteet ja animetietoisuuden tilanne UwU" },
   { command: "komennot", description: "Kaikki käytössä olevat komennot" },
   { command: "help", description: "Käyttö- ja käyttöönotto-ohjeet" },
 ];
@@ -39,6 +40,7 @@ export const GROUP_COMMANDS = [
   { command: "mattonollaa", description: "Nollaa päivän Daily Mättö" },
   { command: "vote_leaderboard", description: "Äänestys väliaikatilanteen julkaisusta" },
   { command: "finalize", description: "Äänestys päivän kisan sulkemisesta" },
+  { command: "animepiste", description: "Animepisteet ja animetietoisuuden tilanne UwU" },
   { command: "komennot", description: "Kaikki käytössä olevat komennot" },
   { command: "setup", description: "Link the bot to this group (admins)" },
   { command: "help", description: "Käyttö- ja käyttöönotto-ohjeet" },

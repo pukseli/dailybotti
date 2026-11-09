@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { finalizeDay, handleUpdate, tick } from "../src/bot";
 import { COMMAND_MENUS, GROUP_COMMANDS, PRIVATE_COMMANDS } from "../src/commands";
 import { getSettings } from "../src/db";
-import { TelegramError } from "../src/telegram";
+import { TelegramError, type Update } from "../src/telegram";
 import {
   BOT_USERNAME,
   FakeTelegram,
@@ -1066,5 +1066,72 @@ describe("/tulos", () => {
     expect(text).toContain("<b>Eraly #8</b> · 510/700");
     expect(text).toContain("🟨🟩🟦🟧🟥🟨💤");
     expect(text).toContain("1. 🟨 100p · 2. 🟩 60p · 3. 🟦 85p · 4. 🟧 30p · 5. 🟥 10p · 6. 🟨 100p · 7. 💤 0p");
+  });
+});
+
+describe("animepiste", () => {
+  it("awards anime points via group message 'animepiste [name] [amount]'", async () => {
+    await linkGroup();
+    // First let Ben participate so Ben exists in players
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(ben, eralyShare(8, 500)));
+    tg.clear();
+
+    // Anna awards Ben 1 anime point
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "animepiste Ben 1"));
+    expect(tg.lastTextTo(GROUP)).toContain("Annettiin <b>+1</b> animepiste käyttäjälle <b>Ben</b>!");
+    expect(tg.lastTextTo(GROUP)).toContain("yhteensä <b>1</b> animepistettä");
+
+    // Anna awards Ben 2 more points
+    tg.clear();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "animepiste Ben 2"));
+    expect(tg.lastTextTo(GROUP)).toContain("Annettiin <b>+2</b> animepistettä käyttäjälle <b>Ben</b>!");
+    expect(tg.lastTextTo(GROUP)).toContain("yhteensä <b>3</b> animepistettä");
+  });
+
+  it("awards anime points by replying to a message with 'animepiste'", async () => {
+    await linkGroup();
+    tg.clear();
+
+    const replyUpdate: Update = {
+      update_id: 9999,
+      message: {
+        message_id: 8888,
+        from: anna,
+        chat: { id: GROUP, type: "supergroup" },
+        text: "animepiste",
+        reply_to_message: {
+          message_id: 7777,
+          from: ben,
+          chat: { id: GROUP, type: "supergroup" },
+          text: "Dattebayo!",
+        },
+      },
+    };
+
+    await handleUpdate(makeCtx(tg, FRI_NOON), replyUpdate);
+    expect(tg.lastTextTo(GROUP)).toContain("Annettiin <b>+1</b> animepiste käyttäjälle <b>Ben</b>!");
+  });
+
+  it("prevents players from awarding anime points to themselves", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, eralyShare(8, 500)));
+    tg.clear();
+
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "animepiste Anna 1"));
+    expect(tg.lastTextTo(GROUP)).toContain("B-Baka!");
+    expect(tg.lastTextTo(GROUP)).toContain("Et voi antaa animepisteitä itsellesi!");
+  });
+
+  it("shows the anime leaderboard with sarcastic congratulations", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(ben, eralyShare(8, 500)));
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "animepiste Ben 5"));
+    tg.clear();
+
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/animepiste"));
+    const text = tg.lastTextTo(GROUP);
+    expect(text).toContain("Ben~senpai!");
+    expect(text).toContain("Hokage / Giga-Weeb");
+    expect(text).toContain("5 p");
   });
 });

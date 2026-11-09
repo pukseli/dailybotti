@@ -584,6 +584,7 @@ export function renderCommands(): string {
     "• <code>/me</code> – Omat tilastot, mitalit, keskiarvot ja ennätykset",
     "• <code>/leaderboard</code> – Kaikkien aikojen tilanne ja lajivoitot",
     "• <code>/regressio [pelaaja | kärki]</code> – Hajonta- ja outlier-analyysi (ilman nimeä tilastokärjestä, nimen kanssa valitusta pelaajasta, tai vastauksena viestiin sen tuloksesta)",
+    "• <code>/animepiste</code> – Animepisteet ja animetietoisuuden tilanne UwU",
     "",
     "<b>Päivän äänestykset (ryhmässä)</b>",
     "• <code>/vote-leaderboard</code> (tai <code>/vote_leaderboard</code>, <code>!vote-leaderboard</code>) – Käynnistä äänestys päivän väliaikatilanteen julkaisusta (vaatii 4 Joo-ääntä)",

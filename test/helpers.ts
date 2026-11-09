@@ -171,6 +171,7 @@ export async function resetDb(): Promise<void> {
       "matto_teams",
       "matto_days",
       // Keep matto_characters / matto_themes: seeded by migrations, shared catalog.
+      "anime_points",
       "imitation_votes",
       "imitation_entries",
       "imitation_days",

@@ -356,3 +356,38 @@ export async function previousMinScoresBeforeDay(
   const { results } = await db.prepare(query).bind(day, ...playerIds).all<PreviousGameMin>();
   return results;
 }
+
+export async function addAnimePoints(
+  db: D1Database,
+  giverId: number | null,
+  receiverId: number,
+  amount: number,
+  nowIso: string,
+): Promise<number> {
+  await db
+    .prepare("INSERT INTO anime_points (giver_id, receiver_id, amount, created_at) VALUES (?, ?, ?, ?)")
+    .bind(giverId, receiverId, amount, nowIso)
+    .run();
+  return getAnimePointsForPlayer(db, receiverId);
+}
+
+export async function getAnimePointsForPlayer(db: D1Database, playerId: number): Promise<number> {
+  const row = await db
+    .prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM anime_points WHERE receiver_id = ?")
+    .bind(playerId)
+    .first<{ total: number }>();
+  return row?.total ?? 0;
+}
+
+export async function getAnimeLeaderboard(db: D1Database): Promise<Array<{ playerId: number; total: number }>> {
+  const { results } = await db
+    .prepare(
+      `SELECT receiver_id AS playerId, SUM(amount) AS total
+       FROM anime_points
+       GROUP BY receiver_id
+       ORDER BY total DESC, receiver_id ASC`,
+    )
+    .all<{ playerId: number; total: number }>();
+  return results;
+}
+

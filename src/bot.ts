@@ -27,6 +27,7 @@ import {
   worstOverallByPlayer,
   worstResultsByGame,
   type PlacementRow,
+  type PlayerRow,
   type ResultRow,
   type Settings,
   type VoteMode,
@@ -36,6 +37,13 @@ import { dayIsClosed, EXPECTED_PLAYERS, isGroupMember, reply, send, sendToGroup,
 
 export { EXPECTED_PLAYERS };
 import { syncCommandMenus } from "./commands";
+import {
+  awardAnimePoints,
+  getRenderedAnimeLeaderboard,
+  parseAnimeTrigger,
+  renderAnimePlayerNotFound,
+  type ParsedAnimeAward,
+} from "./anime";
 import {
   ballotCommand,
   challengeCommand,
@@ -212,10 +220,81 @@ export async function handleUpdate(ctx: Ctx, update: Update): Promise<void> {
     await startVote(ctx, msg, voteMode, settings);
     return;
   }
+  const animeTrigger = parseAnimeTrigger(text, Boolean(msg.reply_to_message));
+  if (animeTrigger) {
+    await handleAnimeAward(ctx, msg, msg.from, animeTrigger);
+    return;
+  }
   return groupResults(ctx, msg, msg.from, text, settings);
 }
 
 // ---------- commands ----------
+
+function findAnimeTargetPlayer(
+  players: PlayerRow[],
+  names: Map<number, string>,
+  query: string,
+): { id: number; name: string } | null {
+  const clean = query.replace(/^@/, "").trim().toLowerCase();
+  if (!clean) return null;
+  const match = players.find(
+    (p) =>
+      (p.username && p.username.toLowerCase() === clean) ||
+      (p.display_name && p.display_name.trim().toLowerCase() === clean) ||
+      p.first_name.toLowerCase() === clean ||
+      (names.get(p.id) && names.get(p.id)!.toLowerCase() === clean),
+  );
+  if (match) {
+    return { id: match.id, name: names.get(match.id) ?? match.first_name };
+  }
+  return null;
+}
+
+async function handleAnimeAward(
+  ctx: Ctx,
+  msg: Message,
+  from: User,
+  trigger: ParsedAnimeAward,
+): Promise<void> {
+  await upsertPlayer(ctx.db, from, ctx.now.toISOString());
+
+  if (msg.reply_to_message?.from) {
+    const targetUser = msg.reply_to_message.from;
+    if (targetUser.is_bot) {
+      await reply(ctx, msg, "B-Baka! Boteille ei voi antaa animepisteitä! &gt;w&lt;");
+      return;
+    }
+    await upsertPlayer(ctx.db, targetUser, ctx.now.toISOString());
+    const players = await allPlayers(ctx.db);
+    const names = displayNames(players);
+    const targetName = names.get(targetUser.id) ?? targetUser.first_name;
+    const response = await awardAnimePoints(
+      ctx.db,
+      from,
+      { id: targetUser.id, name: targetName },
+      trigger.amount,
+      ctx.now.toISOString(),
+    );
+    await reply(ctx, msg, response);
+    return;
+  }
+
+  if (!trigger.targetQuery) {
+    await reply(ctx, msg, "Käyttö: <code>animepiste [käyttäjä] [määrä]</code> tai vastaa viestiin <code>animepiste</code>! UwU");
+    return;
+  }
+
+  const players = await allPlayers(ctx.db);
+  const names = displayNames(players);
+  const target = findAnimeTargetPlayer(players, names, trigger.targetQuery);
+  if (!target) {
+    await reply(ctx, msg, renderAnimePlayerNotFound(trigger.targetQuery));
+    return;
+  }
+
+  const response = await awardAnimePoints(ctx.db, from, target, trigger.amount, ctx.now.toISOString());
+  await reply(ctx, msg, response);
+}
 
 async function findTargetPlayer(
   db: D1Database,
@@ -597,6 +676,17 @@ async function privateCommand(ctx: Ctx, msg: Message, user: User, name: string, 
     case "maettonollaa":
       await mattoResetCommand(ctx, msg, settings);
       return;
+    case "animepiste":
+    case "animepisteet":
+    case "anime": {
+      const trigger = parseAnimeTrigger(msg.text ?? msg.caption ?? "", Boolean(msg.reply_to_message));
+      if (trigger) {
+        await handleAnimeAward(ctx, msg, user, trigger);
+      } else {
+        await reply(ctx, msg, await getRenderedAnimeLeaderboard(ctx.db));
+      }
+      return;
+    }
     case "komennot":
     case "commands":
       await reply(ctx, msg, renderCommands());
@@ -705,6 +795,19 @@ async function groupCommand(ctx: Ctx, msg: Message, name: string, settings: Sett
         await startVote(ctx, msg, "finalize", settings);
       }
       return;
+    case "animepiste":
+    case "animepisteet":
+    case "anime": {
+      if (msg.from && !msg.sender_chat) {
+        const trigger = parseAnimeTrigger(msg.text ?? msg.caption ?? "", Boolean(msg.reply_to_message));
+        if (trigger) {
+          await handleAnimeAward(ctx, msg, msg.from, trigger);
+        } else {
+          await reply(ctx, msg, await getRenderedAnimeLeaderboard(ctx.db));
+        }
+      }
+      return;
+    }
   }
 }
 
