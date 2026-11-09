@@ -258,8 +258,12 @@ async function handleAnimeAward(
 ): Promise<void> {
   await upsertPlayer(ctx.db, from, ctx.now.toISOString());
 
-  if (msg.reply_to_message?.from) {
+  if (msg.reply_to_message) {
     const targetUser = msg.reply_to_message.from;
+    if (!targetUser) {
+      await reply(ctx, msg, "Gomen nasai! (｡•́︿•̀｡) Kanaville tai anonyymeille käyttäjille ei voi antaa animepisteitä!");
+      return;
+    }
     if (targetUser.is_bot) {
       await reply(ctx, msg, "B-Baka! Boteille ei voi antaa animepisteitä! &gt;w&lt;");
       return;

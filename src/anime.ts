@@ -14,27 +14,31 @@ export interface ParsedAnimeAward {
  *  - "animepiste käyttäjä 1"
  *  - "animepiste käyttäjä" (defaults to 1)
  *  - "animepisteet käyttäjä 2"
- *  - "+1 animepiste" (when isReply)
- *  - "animepiste 1" or "animepiste" (when isReply)
+ *  - "+1 animepiste!" (when isReply)
+ *  - "animepiste!", "Animepiste!", "animepiste 1", "animepiste :D" (when isReply)
+ *  - "/animepiste" or "/animepiste 2" (when isReply)
  *  - "/animepiste käyttäjä 1"
  */
 export function parseAnimeTrigger(text: string, isReply: boolean): ParsedAnimeAward | null {
   const trimmed = text.trim();
   if (!trimmed) return null;
 
-  // Slash commands
-  if (/^\/[a-zA-Z0-9_]+/i.test(trimmed)) {
-    const m = /^\/(?:animepiste|animepisteet|anime)(?:@\w+)?(?:\s+(.*))?$/i.exec(trimmed);
-    if (!m) return null;
-    const arg = (m[1] ?? "").trim();
-    if (!arg) return null; // /animepiste alone displays leaderboard
+  // 1. Slash commands: /animepiste, !animepiste, /anime, etc.
+  const cmdMatch = /^[/!](?:animepiste|animepisteet|anime)(?:@\w+)?(?:\s+(.*)|[!?.])?$/i.exec(trimmed);
+  if (cmdMatch) {
+    const rawArg = (cmdMatch[1] ?? "").replace(/[!.,?]+$/, "").trim();
+    if (!rawArg) {
+      // In reply, /animepiste awards 1 point. Otherwise, standalone /animepiste displays the leaderboard.
+      return isReply ? { amount: 1 } : null;
+    }
 
-    if (isReply && /^\d+$/.test(arg)) {
-      const amount = Math.min(50, Math.max(1, parseInt(arg, 10)));
+    if (isReply) {
+      const numMatch = /\b(\d+)\b/.exec(rawArg);
+      const amount = numMatch && numMatch[1] ? Math.min(50, Math.max(1, parseInt(numMatch[1], 10))) : 1;
       return { amount };
     }
 
-    const match = /^(.*?)(?:\s+(\d+))?$/.exec(arg);
+    const match = /^(.*?)(?:\s+(\d+))?[!.,?]*$/.exec(rawArg);
     if (!match || !match[1]) return null;
     const targetQuery = match[1].trim();
     if (!targetQuery) return null;
@@ -42,29 +46,31 @@ export function parseAnimeTrigger(text: string, isReply: boolean): ParsedAnimeAw
     return { targetQuery, amount };
   }
 
-  // "+1 animepiste" reply
-  if (/^\+([0-9]+)\s*anime[-_]?piste(?:et)?$/i.test(trimmed)) {
-    const m = /^\+([0-9]+)\s*anime[-_]?piste(?:et)?$/i.exec(trimmed);
-    const amount = m && m[1] ? Math.min(50, Math.max(1, parseInt(m[1], 10))) : 1;
+  // 2. "+1 animepiste", "+animepiste", "+5 animepisteet!"
+  const plusMatch = /^\+([0-9]*)\s*anime[-_]?piste(?:et)?.*$/i.exec(trimmed);
+  if (plusMatch) {
+    const amount = plusMatch[1] ? Math.min(50, Math.max(1, parseInt(plusMatch[1], 10))) : 1;
     return isReply ? { amount } : null;
   }
 
-  // Plain text "animepiste ..."
-  const plainMatch = /^(?:anime[-_]?piste(?:et)?)(?:\s+(.*))?$/i.exec(trimmed);
+  // 3. Plain text starting with "animepiste" or "anime-piste" or "animepisteet"
+  // e.g. "animepiste!", "Animepiste!", "animepiste 1", "animepiste Matti 2", "animepiste :D"
+  const plainMatch = /^(?:anime[-_]?piste(?:et)?)(?:[!.,?]*\s*(.*))?$/i.exec(trimmed);
   if (!plainMatch) return null;
 
   const rest = (plainMatch[1] ?? "").trim();
-  if (!rest) {
-    if (isReply) return { amount: 1 };
-    return null;
-  }
 
-  if (isReply && /^\d+$/.test(rest)) {
-    const amount = Math.min(50, Math.max(1, parseInt(rest, 10)));
+  if (isReply) {
+    // When replying, any text starting with animepiste gives points to the replied user.
+    // Check if an explicit number is given, e.g. "animepiste 2" or "animepiste! 3"
+    const numMatch = /\b(\d+)\b/.exec(rest);
+    const amount = numMatch && numMatch[1] ? Math.min(50, Math.max(1, parseInt(numMatch[1], 10))) : 1;
     return { amount };
   }
 
-  const userMatch = /^(.*?)(?:\s+(\d+))?$/.exec(rest);
+  // Not a reply: requires target player
+  if (!rest) return null;
+  const userMatch = /^(.*?)(?:\s+(\d+))?[!.,?]*$/.exec(rest);
   if (!userMatch || !userMatch[1]) return null;
   const targetQuery = userMatch[1].trim();
   if (!targetQuery) return null;

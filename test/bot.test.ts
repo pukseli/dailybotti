@@ -1159,7 +1159,7 @@ describe("animepiste", () => {
         message_id: 8888,
         from: anna,
         chat: { id: GROUP, type: "supergroup" },
-        text: "animepiste",
+        text: "animepiste!",
         reply_to_message: {
           message_id: 7777,
           from: ben,
@@ -1171,6 +1171,27 @@ describe("animepiste", () => {
 
     await handleUpdate(makeCtx(tg, FRI_NOON), replyUpdate);
     expect(tg.lastTextTo(GROUP)).toContain("Annettiin <b>+1</b> animepiste käyttäjälle <b>Ben</b>!");
+
+    // Also works with capitalized "Animepiste!"
+    tg.clear();
+    const replyCapital: Update = {
+      update_id: 10000,
+      message: {
+        message_id: 8889,
+        from: anna,
+        chat: { id: GROUP, type: "supergroup" },
+        text: "Animepiste!",
+        reply_to_message: {
+          message_id: 7777,
+          from: ben,
+          chat: { id: GROUP, type: "supergroup" },
+          text: "Dattebayo!",
+        },
+      },
+    };
+    await handleUpdate(makeCtx(tg, FRI_NOON), replyCapital);
+    expect(tg.lastTextTo(GROUP)).toContain("Annettiin <b>+1</b> animepiste käyttäjälle <b>Ben</b>!");
+    expect(tg.lastTextTo(GROUP)).toContain("yhteensä <b>2</b> animepistettä");
   });
 
   it("prevents players from awarding anime points to themselves", async () => {

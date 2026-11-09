@@ -43,12 +43,20 @@ describe("parseAnimeTrigger", () => {
     expect(parseAnimeTrigger("+1 animepiste", true)).toEqual({ amount: 1 });
     expect(parseAnimeTrigger("+3 animepisteet", true)).toEqual({ amount: 3 });
     expect(parseAnimeTrigger("/animepiste 2", true)).toEqual({ amount: 2 });
+    expect(parseAnimeTrigger("animepiste!", true)).toEqual({ amount: 1 });
+    expect(parseAnimeTrigger("Animepiste!", true)).toEqual({ amount: 1 });
+    expect(parseAnimeTrigger("animepiste!!", true)).toEqual({ amount: 1 });
+    expect(parseAnimeTrigger("animepiste.", true)).toEqual({ amount: 1 });
+    expect(parseAnimeTrigger("animepiste! 2", true)).toEqual({ amount: 2 });
+    expect(parseAnimeTrigger("+1 animepiste!", true)).toEqual({ amount: 1 });
+    expect(parseAnimeTrigger("/animepiste!", true)).toEqual({ amount: 1 });
+    expect(parseAnimeTrigger("/animepiste", true)).toEqual({ amount: 1 });
   });
 
   it("returns null for non-reply single 'animepiste' or empty / invalid commands", () => {
     expect(parseAnimeTrigger("animepiste", false)).toBeNull();
+    expect(parseAnimeTrigger("animepiste!", false)).toBeNull();
     expect(parseAnimeTrigger("/animepiste", false)).toBeNull();
-    expect(parseAnimeTrigger("/animepiste", true)).toBeNull();
     expect(parseAnimeTrigger("+1 animepiste", false)).toBeNull();
     expect(parseAnimeTrigger("jotain muuta tekstiä", false)).toBeNull();
   });
