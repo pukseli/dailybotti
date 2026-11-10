@@ -25,22 +25,22 @@ It isn't a credential (nothing works with it alone), but this repo is public, so
 
 ## Publishing
 
-Not live yet: waiting on the Cloudflare steps below. A nightly GitHub Action takes a fresh snapshot, exports the notebook to static files
+Live at https://dailybotti-dashboard.pages.dev (login required) since 2026-11-10. A nightly GitHub Action takes a fresh snapshot, exports the notebook to static files
 (it runs in the browser with Pyodide) and deploys them to Cloudflare Pages behind Cloudflare Access, so only
 the group can open it. The snapshot only holds the names players go by, never Telegram ids, usernames or raw
 share text.
 
 ### 1. Cloudflare and GitHub (pukseli, who owns the bot's account and the repo)
 
-- [ ] **Pages project**, created by hand and empty, so Access is in place before anything is uploaded:
+- [x] **Pages project**, created by hand and empty, so Access is in place before anything is uploaded:
       `npx wrangler pages project create dailybotti-dashboard --production-branch main`. The workflow never
       creates it, so a missing project makes the deploy fail rather than publish an open site.
-- [ ] **Cloudflare Access** (Zero Trust, free up to 50 users) on **both** `dailybotti-dashboard.pages.dev` and
+- [x] **Cloudflare Access** (Zero Trust, free up to 50 users) on **both** `dailybotti-dashboard.pages.dev` and
       `*.dailybotti-dashboard.pages.dev` (preview deployments get their own URLs). Policy: *Allow*, *Emails*: the
       group. Login method: one-time PIN (new Zero Trust accounts only have Cloudflare login, so add it).
       Session duration: one month.
-- [ ] Check in a private window that both the main and a preview URL ask for a login.
-- [ ] **API token for CI** with *Cloudflare Pages: Edit* and *D1: Read* on the bot's account, saved as the repo
+- [x] Check in a private window that both the main and a preview URL ask for a login.
+- [x] **API token for CI** with *Cloudflare Pages: Edit* and *D1: Read* on the bot's account, saved as the repo
       secret `DASHBOARD_API_TOKEN`. `CLOUDFLARE_ACCOUNT_ID` is already there.
 
 ### 2. Repo
