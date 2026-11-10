@@ -507,7 +507,19 @@ def _(CATEGORIES, mo):
 
 
 @app.cell
-def _(alt, period_placements, pl, player_scale, style, trend_category):
+def _(
+    INK,
+    OTHER,
+    RULE,
+    alt,
+    html,
+    mo,
+    period_placements,
+    pl,
+    player_scale,
+    style,
+    trend_category,
+):
     _overall = trend_category.value == "overall"
     _trend = (
         period_placements.filter(pl.col("category") == trend_category.value)
@@ -533,7 +545,32 @@ def _(alt, period_placements, pl, player_scale, style, trend_category):
     )
     _rule = _base.mark_rule(color="gray", opacity=0.4).transform_filter(_nearest)
     _catch = _base.mark_rule(opacity=0).add_params(_nearest)
-    style(alt.layer(_daily, _lines, _rule, _hover, _catch).properties(width="container", height=320))
+    _chart = style(alt.layer(_daily, _lines, _rule, _hover, _catch).properties(width="container", height=320))
+
+    # Where each line starts and ends in the period, and the change between, in the player's chart colour order.
+    _ends = (
+        _trend.group_by("who")
+        .agg(start=pl.col("avg").first(), end=pl.col("avg").last())
+        .with_columns(change=(pl.col("end") - pl.col("start")) / pl.col("start") * 100)
+    )
+    _colors = dict(zip(player_scale.domain, player_scale.range))
+    _rows = "".join(
+        f"""<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid {RULE}">
+          <span style="width:10px;height:10px;border-radius:50%;background:{_colors[_w]};flex:none"></span>
+          <span style="flex:1">{html.escape(_w)}</span>
+          <span style="font-variant-numeric:tabular-nums">{_e["start"]:.0f} → <b>{_e["end"]:.0f}</b></span>
+          <span style="width:58px;text-align:right;color:{OTHER};font-variant-numeric:tabular-nums">{"" if _e["change"] is None else f"{_e['change']:+.1f}%"}</span>
+        </div>"""
+        for _w in player_scale.domain
+        for _e in _ends.filter(pl.col("who") == _w).iter_rows(named=True)
+    )
+    _summary = mo.Html(
+        f"""<div style="font-family:system-ui,sans-serif;font-size:13px;color:{INK};min-width:220px">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:{OTHER};margin-bottom:2px">7-day average, start → end</div>
+          {_rows}
+        </div>"""
+    )
+    mo.hstack([_chart, _summary], widths=[4, 1], align="center", gap=1.5)
     return
 
 
