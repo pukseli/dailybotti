@@ -7,6 +7,7 @@ on:
     # The dashboard is its own Python project and doesn't change the bot.
     paths-ignore:
       - "dashboard/**"
+      - ".github/workflows/dashboard.yml"
   workflow_dispatch:
 
 # Two quick pushes deploy one after the other, never at the same time.

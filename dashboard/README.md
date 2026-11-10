@@ -23,38 +23,32 @@ CLOUDFLARE_ACCOUNT_ID=<bot account id> uv run snapshot.py
 The id is the one in the repo's `CLOUDFLARE_ACCOUNT_ID` GitHub secret, also shown by `npx wrangler whoami`.
 It isn't a credential (nothing works with it alone), but this repo is public, so keep it out of committed files.
 
-## Publishing (TODO)
+## Publishing
 
-Not live yet. The plan: a daily GitHub Action takes a fresh snapshot, exports the notebook to static files
+Not live yet: waiting on the Cloudflare steps below. A nightly GitHub Action takes a fresh snapshot, exports the notebook to static files
 (it runs in the browser with Pyodide) and deploys them to Cloudflare Pages behind Cloudflare Access, so only
 the group can open it. The snapshot only holds the names players go by, never Telegram ids, usernames or raw
 share text.
 
-### 1. Cloudflare (someone with access to the bot's account)
+### 1. Cloudflare and GitHub (pukseli, who owns the bot's account and the repo)
 
-- [ ] **API token for CI.** Needs *Cloudflare Pages: Edit* and *D1: Read*. Either add those to the existing
-      `CLOUDFLARE_API_TOKEN` secret's token or make a separate one (e.g. a `DASHBOARD_API_TOKEN` secret), which
-      keeps the bot's token narrow.
-- [ ] **Pages project.** `npx wrangler pages project create dailybotti-dashboard --production-branch main`
-      (or let the first deploy create it).
-- [ ] **Cloudflare Access** (Zero Trust, free up to 50 users). Add a self-hosted application covering **both**
-      `dailybotti-dashboard.pages.dev` and `*.dailybotti-dashboard.pages.dev`; preview deployments get their
-      own URLs and would otherwise be open. Policy: *Allow*, the group's emails. Login method: one-time PIN
-      (optionally Google/GitHub). Session duration: e.g. one month.
+- [ ] **Pages project**, created by hand and empty, so Access is in place before anything is uploaded:
+      `npx wrangler pages project create dailybotti-dashboard --production-branch main`. The workflow never
+      creates it, so a missing project makes the deploy fail rather than publish an open site.
+- [ ] **Cloudflare Access** (Zero Trust, free up to 50 users) on **both** `dailybotti-dashboard.pages.dev` and
+      `*.dailybotti-dashboard.pages.dev` (preview deployments get their own URLs). Policy: *Allow*, *Emails*: the
+      group. Login method: one-time PIN (new Zero Trust accounts only have Cloudflare login, so add it).
+      Session duration: one month.
 - [ ] Check in a private window that both the main and a preview URL ask for a login.
+- [ ] **API token for CI** with *Cloudflare Pages: Edit* and *D1: Read* on the bot's account, saved as the repo
+      secret `DASHBOARD_API_TOKEN`. `CLOUDFLARE_ACCOUNT_ID` is already there.
 
 ### 2. Repo
 
-- [ ] `.github/workflows/dashboard.yml`, roughly:
-  - `on: schedule` with cron `15 22 * * *` (just after the day closes at midnight Helsinki in winter; that's
-    21:00 UTC in summer, so it lands at 01:15 then) plus `workflow_dispatch` for manual runs.
-  - Checkout, `astral-sh/setup-uv`, Node + `npm ci` (for wrangler).
-  - `uv run snapshot.py` in `dashboard/`, with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` from secrets
-    in the environment.
-  - `uv run marimo export html-wasm dashboard.py -o site --mode run`, then delete `site/CLAUDE.md` (a generic
-    file marimo adds to every export).
-  - `npx wrangler pages deploy dashboard/site --project-name dailybotti-dashboard --branch main`.
-- [ ] `deploy.yml` already ignores `dashboard/**`, so dashboard commits don't redeploy the bot. Nothing to do.
+- [x] `.github/workflows/dashboard.yml`: nightly at 22:15 UTC (00:15 Helsinki in winter, 01:15 in summer) plus
+      a manual *Run workflow* button. Snapshot, `marimo export html-wasm`, `wrangler pages deploy`. It skips
+      itself with a notice until `DASHBOARD_API_TOKEN` exists.
+- [x] `deploy.yml` ignores `dashboard/**` and the dashboard workflow, so dashboard commits don't redeploy the bot.
 
 ### 3. Check before sharing the link
 
