@@ -608,7 +608,7 @@ def _(GAMES, alt, period_results, pl, player_scale, style):
 def _(mo):
     mo.md("""
     ## Who shows up
-    Every day in the period, one box per game for each player.
+    A contribution graph for each player: one square per day, weeks running left to right. The darker the square, the more of the day's games they posted.
     """)
     return
 
@@ -618,22 +618,26 @@ def _(
     GAMES,
     INK,
     OTHER,
+    RULE,
+    alt,
     first_day,
-    gt,
     last_day,
+    mo,
     period_results,
     picked,
     pl,
     player_scale,
-    results,
+    style,
 ):
     import datetime as _dt
 
-    # One box per player, game and day. A player can post each game once a day, so a box is either ticked or not.
-    # Days before a game's first result in the group get a dash instead: there was nothing to miss.
+    # A contribution graph per player: one square per day, weeks across and Monday to Sunday down.
+    # The shade is how many games they posted that day, 0 to 3, in the player's own colour.
     _who = [w for w in player_scale.domain if w in picked.value]
-    _started = dict(results.group_by("game").agg(pl.col("day").min()).iter_rows())
-    _posted = period_results.select("day", "who", "game").with_columns(posted=pl.lit(True))
+    _posted = period_results.group_by("day", "who").agg(
+        games=pl.col("game").n_unique(),
+        names=pl.col("game_name").sort_by(pl.col("game").replace_strict(list(GAMES), list(range(len(GAMES))))).str.join(", "),
+    )
     attendance = (
         # A Python list, not pl.date_range: the browser build of polars is 32-bit and overflows on a 1-day step.
         pl.DataFrame(
@@ -641,48 +645,76 @@ def _(
             schema={"day": pl.Date},
         )
         .join(pl.DataFrame({"who": _who}), how="cross")
-        .join(pl.DataFrame({"game": list(GAMES)}), how="cross")
-        .join(_posted, on=["day", "who", "game"], how="left")
+        .join(_posted, on=["day", "who"], how="left")
         .with_columns(
-            box=pl.when(pl.col("day") < pl.col("game").replace_strict(_started, default=None))
-            .then(pl.lit("–"))
-            .when(pl.col("posted"))
-            .then(pl.lit("☑"))
-            .otherwise(pl.lit("☐")),
-            column=pl.format("{}|{}", "who", "game"),
+            games=pl.col("games").fill_null(0),
+            names=pl.col("names").fill_null("Nothing posted"),
+            weekday=pl.col("day").dt.strftime("%a"),
+            week=(pl.col("day") - pl.duration(days=pl.col("day").dt.weekday() - 1)).dt.strftime("%Y-%m-%d"),
+            date=pl.col("day").dt.strftime("%a %-d %b"),
         )
-        .pivot("column", index="day", values="box")
-        .sort("day", descending=True)
     )
 
+    # Month names over the week where each month starts, as on GitHub. The first column gets its month too,
+    # unless the next name would crowd it.
+    _weeks = attendance.group_by("week").agg(pl.col("day").min(), pl.col("day").max().alias("last")).sort("week").rows()
+    _months = {_w: _l.strftime("%b") for _w, _f, _l in _weeks if _f.day == 1 or _l.day < _f.day}
+    _first_week, _first_day, _ = _weeks[0]
+    if _first_week not in _months and all(_w not in _months for _w, _, _ in _weeks[1:3]):
+        _months[_first_week] = _first_day.strftime("%b")
+    _month_expr = "{" + ",".join(f"'{k}':'{v}'" for k, v in _months.items()) + "}[datum.value] || ''"
     _colors = dict(zip(player_scale.domain, player_scale.range))
-    _columns = {w: [f"{w}|{g}" for g in GAMES] for w in _who}
-    _table = (
-        gt.GT(attendance.with_columns(pl.col("day").dt.strftime("%a %d %b")))
-        .cols_label(day="", **{c: GAMES[c.split("|")[1]][0] for cs in _columns.values() for c in cs})
-        .cols_align("center", columns=[c for cs in _columns.values() for c in cs])
-        .tab_style(gt.style.text(color=OTHER, size="13px"), gt.loc.body(columns="day"))
-        .tab_source_note(f"{' · '.join(f'{name[0]} = {name}' for name in GAMES.values())}. ☑ posted · ☐ missed · – game not in the group yet")
-        .opt_table_font(stack="system-ui")
-        .tab_options(
-            table_width="100%",
-            table_background_color="transparent",
-            table_font_color=INK,
-            table_border_top_style="hidden",
-            table_border_bottom_style="hidden",
-            column_labels_border_top_style="hidden",
-            table_body_hlines_style="hidden",
-            data_row_padding="2px",
-            container_height="460px",
-            container_overflow_y="auto",
-            source_notes_font_size="12px",
+    _shade = [0, 0.4, 0.7, 1]
+
+
+    def _graph(who):
+        _rows = attendance.filter(pl.col("who") == who)
+        _days = (_rows["games"] > 0).sum()
+        return (
+            alt.Chart(_rows)
+            .mark_rect(cornerRadius=2)
+            .encode(
+                x=alt.X(
+                    "week:O",
+                    title=None,
+                    scale=alt.Scale(paddingInner=0.2),
+                    axis=alt.Axis(orient="top", labelExpr=_month_expr, labelAngle=0, labelAlign="left", labelOffset=-7, ticks=False, domain=False),
+                ),
+                y=alt.Y(
+                    "weekday:O",
+                    title=None,
+                    sort=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+                    scale=alt.Scale(domain=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], paddingInner=0.2),
+                    axis=alt.Axis(labelExpr="indexof(['Mon','Wed','Fri'], datum.value) >= 0 ? datum.value : ''", ticks=False, domain=False),
+                ),
+                color=alt.condition(alt.datum.games > 0, alt.value(_colors[who]), alt.value(RULE)),
+                opacity=alt.Opacity("games:Q", scale=alt.Scale(domain=[0, 1, 2, 3], range=[1] + _shade[1:]), legend=None),
+                tooltip=[
+                    alt.Tooltip("date:N", title="Day"),
+                    alt.Tooltip("games:Q", title=f"Games of {len(GAMES)}"),
+                    alt.Tooltip("names:N", title="Posted"),
+                ],
+            )
+            .properties(
+                width=alt.Step(14),
+                height=alt.Step(14),
+                title=alt.Title(who, subtitle=f"{_rows['games'].sum()} games on {_days} of {_rows.height} days", anchor="start", color=INK, subtitleColor=OTHER, fontSize=13),
+            )
         )
+
+
+    _legend = "".join(
+        f'<span style="width:11px;height:11px;border-radius:2px;background:{OTHER if _s else RULE};opacity:{_s or 1}"></span>' for _s in _shade
     )
-    for _w, _cs in _columns.items():
-        _table = _table.tab_spanner(_w, columns=_cs).tab_style(
-            gt.style.text(color=_colors[_w], size="17px"), gt.loc.body(columns=_cs)
-        )
-    _table
+    mo.vstack(
+        [
+            style(alt.concat(*[_graph(w) for w in _who], columns=2, spacing=28)),
+            mo.Html(
+                f'<div style="display:flex;align-items:center;gap:3px;font:12px system-ui,sans-serif;color:{OTHER}">'
+                f'<span style="margin-right:4px">0 games</span>{_legend}<span style="margin-left:4px">{len(GAMES)} games</span></div>'
+            ),
+        ]
+    )
     return
 
 

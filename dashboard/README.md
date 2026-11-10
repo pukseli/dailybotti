@@ -34,7 +34,7 @@ and **Players** pickers at the top. Times are Helsinki time.
   max, summed, out of 300; a skipped game counts as 0), the last 14 days, and daily wins per game.
 - **Form over time**: a 7-day average of the picked score per player, with each day as a dot. Beside it, where each line starts and ends in the period and the % change.
 - **How consistent everyone is**: box plots of every result as a % of the game's max.
-- **Who shows up**: one box per day, player and game; a dash means the game wasn't in the group yet.
+- **Who shows up**: a GitHub-style contribution graph per player; each day's shade is how many of the games they posted.
 - **Play patterns**: a 24-hour clock per player; each hour's wedge is its share of their plays, games stacked.
 - **All results**: the raw table, searchable.
 
