@@ -186,6 +186,21 @@ describe("private results", () => {
     expect(tg.lastTextTo(anna.id)).toContain("📖 <b>Käytössä olevat komennot</b>");
   });
 
+  it("posts the dashboard link and when it was last published, in Helsinki time", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(ben, "/dashboard"));
+    expect(tg.lastTextTo(GROUP)).toContain("https://dailybotti-dashboard.pages.dev");
+    expect(tg.lastTextTo(GROUP)).toContain("Päivitysaikaa ei ole vielä tallessa.");
+
+    // What .github/workflows/dashboard.yml writes after a successful deploy. 22:16 UTC is 00:16 in Helsinki in winter.
+    await env.DB.prepare("INSERT INTO settings (key, value) VALUES ('dashboard_updated_at', '2026-11-10T22:16:05Z')").run();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(ben, "/tilastot"));
+    expect(tg.lastTextTo(GROUP)).toContain("Päivitetty viimeksi 2026-11-11 klo 00:16 (Europe/Helsinki).");
+
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, "/dashboard"));
+    expect(tg.lastTextTo(anna.id)).toContain("https://dailybotti-dashboard.pages.dev");
+  });
+
   it("counts only the first result per game and day", async () => {
     await linkGroup();
     await handleUpdate(makeCtx(tg, FRI_NOON), dm(ben, eralyShare(8, 500)));

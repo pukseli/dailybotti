@@ -5,7 +5,7 @@ import { ERALY_SYMBOL_POINTS, GAMES, KRILLION_SYMBOL_POINTS, gameById, gameTitle
 import type { BlowoutReport, RegressioReport } from "./regressio";
 import { MEDALS, placeMark, shameRank, type Category, type Standing } from "./scoring";
 import type { InlineKeyboardMarkup } from "./telegram";
-import { dayLabel } from "./time";
+import { dayLabel, localParts } from "./time";
 
 const MAX_LENGTH = 4000; // Telegram allows 4096 characters per message
 
@@ -584,6 +584,7 @@ export function renderCommands(): string {
     "• <code>/leaderboard</code> – Kaikkien aikojen tilanne ja lajivoitot",
     "• <code>/regressio [pelaaja | kärki]</code> – Hajonta- ja outlier-analyysi (ilman nimeä tilastokärjestä, nimen kanssa valitusta pelaajasta, tai vastauksena viestiin sen tuloksesta)",
     "• <code>/animepiste</code> – Animepisteet ja animetietoisuuden tilanne UwU",
+    "• <code>/dashboard</code> (tai <code>/tilastot</code>) – Linkki tilastodashboardiin ja sen viimeisin päivitysaika",
     "",
     "<b>Päivän äänestykset (ryhmässä)</b>",
     "• <code>/vote-leaderboard</code> (tai <code>/vote_leaderboard</code>, <code>!vote-leaderboard</code>) – Käynnistä äänestys päivän väliaikatilanteen julkaisusta (vaatii 4 Joo-ääntä)",
@@ -610,6 +611,26 @@ export function renderCommands(): string {
     "• <code>/setup</code> – Yhdistä botti ryhmään (vain ryhmän ylläpitäjille)",
   ];
   return fit(lines);
+}
+
+export const DASHBOARD_URL = "https://dailybotti-dashboard.pages.dev";
+
+/** /dashboard: the link to the stats dashboard and when it was last published, in the group's timezone. */
+export function renderDashboard(opts: { updatedAt: string | null; timeZone: string }): string {
+  const when = opts.updatedAt ? new Date(opts.updatedAt) : null;
+  let updated = "Päivitysaikaa ei ole vielä tallessa.";
+  if (when && !Number.isNaN(when.getTime())) {
+    const { date, time } = localParts(when, opts.timeZone);
+    updated = `Päivitetty viimeksi ${date} klo ${time} (${escapeHtml(opts.timeZone)}).`;
+  }
+  return [
+    "📊 <b>Tilastodashboard</b>",
+    DASHBOARD_URL,
+    "",
+    updated,
+    "Dashboard päivittyy joka yö pian keskiyön jälkeen.",
+    "Kirjaudu sähköpostillasi, niin saat kertakäyttöisen koodin.",
+  ].join("\n");
 }
 
 /** /help and /start: how to take part, the rules, the commands and how to set the bot up in a group. */
@@ -639,6 +660,7 @@ export function renderHelp(opts: { closeTime: string; timeZone: string; linked: 
     "/tulos [pelaaja] [peli] [eilen | YYYY-MM-DD | #nro] (tai /tulokset) – pelaajan pelitulos kierroksittain (omat tulokset päivän ollessa auki, kaikkien tulokset päivän sulkeuduttua)",
     "/me – omat tilastosi",
     "/leaderboard – kaikkien aikojen tilanne",
+    "/dashboard (tai /tilastot) – linkki tilastodashboardiin ja sen viimeisin päivitysaika",
     "/regressio – hajonta-analyysi: ilman nimeä kärjestä, nimen kanssa siitä pelaajasta, tai vastauksena viestiin sen tuloksesta",
     "/name Uusi nimi (tai /nimi) – vaihda nimesi tauluun, palkintopalleille ja tilastoihin. /name reset palauttaa Telegram-nimen",
     "/vote-leaderboard (tai /vote_leaderboard, !vote-leaderboard) – käynnistä äänestys päivän väliaikatilanteen julkaisusta (tai /finalize / /vote-leaderboard finalize päivän sulkemisesta)",

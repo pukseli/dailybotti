@@ -85,6 +85,7 @@ import {
   renderRegressio,
   renderSummary,
   renderVoteKeyboard,
+  renderDashboard,
   renderVoteMessage,
   renderWorstSummary,
   type NewWorstScoreAlert,
@@ -645,6 +646,10 @@ async function privateCommand(ctx: Ctx, msg: Message, user: User, name: string, 
     case "leaderboard":
       await reply(ctx, msg, await leaderboardText(ctx));
       return;
+    case "dashboard":
+    case "tilastot":
+      await reply(ctx, msg, renderDashboard({ updatedAt: settings.dashboardUpdatedAt, timeZone: ctx.timeZone }));
+      return;
     case "pohjat":
     case "pohjanoteeraus":
     case "jumbo":
@@ -745,6 +750,10 @@ async function groupCommand(ctx: Ctx, msg: Message, name: string, settings: Sett
       return;
     case "leaderboard":
       await reply(ctx, msg, await leaderboardText(ctx));
+      return;
+    case "dashboard":
+    case "tilastot":
+      await reply(ctx, msg, renderDashboard({ updatedAt: settings.dashboardUpdatedAt, timeZone: ctx.timeZone }));
       return;
     case "pohjat":
     case "pohjanoteeraus":

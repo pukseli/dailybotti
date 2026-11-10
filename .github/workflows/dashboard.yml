@@ -69,3 +69,14 @@ jobs:
       - name: Deploy to Cloudflare Pages
         if: steps.setup.outputs.ready == 'true'
         run: npx wrangler pages deploy dashboard/site --project-name dailybotti-dashboard --branch main --commit-dirty=true
+
+      # Tells the bot when the dashboard was last published, for its /dashboard command. Uses the bot's own token,
+      # since the dashboard token can only read D1; it writes this one settings row and nothing else.
+      - name: Record the publish time for the bot
+        if: steps.setup.outputs.ready == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          npx wrangler d1 execute daily-games-bot --remote --command \
+            "INSERT INTO settings (key, value) VALUES ('dashboard_updated_at', '$now') ON CONFLICT(key) DO UPDATE SET value = excluded.value"

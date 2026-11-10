@@ -9,6 +9,8 @@ export interface Settings {
   botId: number | null;
   /** The command menus as last sent to Telegram (see commands.ts). */
   commandMenus: string | null;
+  /** When the stats dashboard was last published (ISO instant), written by .github/workflows/dashboard.yml. */
+  dashboardUpdatedAt: string | null;
 }
 
 export async function getSettings(db: D1Database): Promise<Settings> {
@@ -21,6 +23,7 @@ export async function getSettings(db: D1Database): Promise<Settings> {
     botUsername: map.get("bot_username") ?? null,
     botId: num("bot_id"),
     commandMenus: map.get("command_menus") ?? null,
+    dashboardUpdatedAt: map.get("dashboard_updated_at") ?? null,
   };
 }
 
