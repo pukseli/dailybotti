@@ -653,44 +653,91 @@ def _(
 def _(mo):
     mo.md("""
     ## Play patterns
-    When everyone posts each game, by hour in Helsinki time. Darker means a bigger share of that player's plays of that game.
+    When everyone posts, as a 24-hour clock in Helsinki time with midnight at the top. Each wedge is an hour; its size is that hour's share of the player's plays, with games stacked from the centre out: Eraly darkest, then Krillion, then Size It Up palest. Hover a wedge for the numbers.
     """)
     return
 
 
 @app.cell(hide_code=True)
-def _(GAMES, alt, period_results, pl, player_scale, style):
-    # Each row is one player's plays of one game, split by local hour; shares make occasional players comparable.
+def _(GAMES, INK, OTHER, RULE, alt, period_results, pl, player_scale, style):
+    import math as _math
+
+    # One 24-hour clock per player: midnight at the top, one wedge per hour, games stacked outwards in bot order.
+    # Shares are of the player's plays, so occasional players compare fairly. Radius grows with the square root
+    # of the share, so a wedge's area (not its length) matches it; every clock uses the same scale.
+    _R = 92
+    _game_order = list(GAMES.values())
     _hours = (
         period_results.group_by("who", "game_name", "hour")
         .len(name="plays")
-        .with_columns(share=(pl.col("plays") / pl.col("plays").sum().over("who", "game_name") * 100).round(0))
-        .with_columns(slot=pl.format("{}:00–{}:00", pl.col("hour").cast(pl.String).str.zfill(2), ((pl.col("hour") + 1) % 24).cast(pl.String).str.zfill(2)))
-    )
-    _patterns = (
-        alt.Chart(_hours)
-        .mark_rect(cornerRadius=2)
-        .encode(
-            x=alt.X(
-                "hour:O",
-                title=None,
-                scale=alt.Scale(domain=list(range(24)), paddingInner=0.12),
-                axis=alt.Axis(labelAngle=0, labelExpr="datum.value % 6 == 0 ? datum.value + ':00' : ''", ticks=False),
-            ),
-            y=alt.Y("game_name:N", title=None, sort=list(GAMES.values()), scale=alt.Scale(paddingInner=0.12)),
-            color=alt.Color("share:Q", title="% of their plays", scale=alt.Scale(scheme="blues", domain=[0, 50], clamp=True)),
-            tooltip=[
-                alt.Tooltip("who:N", title="Player"),
-                alt.Tooltip("game_name:N", title="Game"),
-                alt.Tooltip("slot:N", title="Time"),
-                alt.Tooltip("plays:Q", title="Plays"),
-                alt.Tooltip("share:Q", title="% of their plays", format=".0f"),
-            ],
+        .with_columns(
+            share=pl.col("plays") / pl.col("plays").sum().over("who") * 100,
+            order=pl.col("game_name").replace_strict(_game_order, list(range(len(_game_order)))),
         )
-        .properties(width=alt.Step(13), height=alt.Step(20))
-        .facet(facet=alt.Facet("who:N", title=None, sort=player_scale.domain, header=alt.Header(labelFontWeight="bold", labelAnchor="start")), columns=2)
+        .sort("who", "hour", "order")
+        .with_columns(top=pl.col("share").cum_sum().over("who", "hour"))
+        .with_columns(bottom=pl.col("top") - pl.col("share"))
     )
-    style(_patterns)
+    _peak = _hours["top"].max() or 1
+    _hours = _hours.with_columns(
+        r=(pl.col("bottom") / _peak).sqrt() * _R + pl.when(pl.col("bottom") > 0).then(1).otherwise(0),
+        r2=(pl.col("top") / _peak).sqrt() * _R,
+        t=pl.col("hour") / 24 * 2 * _math.pi,
+        t2=(pl.col("hour") + 1) / 24 * 2 * _math.pi,
+        slot=pl.format("{}:00–{}:00", pl.col("hour").cast(pl.String).str.zfill(2), ((pl.col("hour") + 1) % 24).cast(pl.String).str.zfill(2)),
+    )
+    # Guide rings at round shares below the peak, and the four quarter hours around the edge.
+    _rings = pl.DataFrame({"level": [l for l in (5, 10, 25, 50, 100) if l <= _peak + 0.5][-2:] or [_peak]}).with_columns(
+        r=(pl.col("level") / _peak).sqrt() * _R, label=pl.format("{}%", pl.col("level").round(0).cast(pl.Int64))
+    )
+    _ticks = pl.DataFrame({"hour": [0, 6, 12, 18]}).with_columns(
+        t=pl.col("hour") / 24 * 2 * _math.pi, label=pl.format("{}:00", pl.col("hour").cast(pl.String).str.zfill(2))
+    )
+    _colors = dict(zip(player_scale.domain, player_scale.range))
+
+
+    def _clock(who):
+        _base = alt.Chart(_rings)
+        rings = _base.mark_arc(fill=None, stroke=RULE, strokeWidth=1).encode(
+            theta=alt.value(0), theta2=alt.value(2 * _math.pi), radius=alt.Radius("r:Q", scale=None), radius2=alt.Radius2("r:Q")
+        )
+        ring_labels = _base.mark_text(fontSize=10, color=OTHER, dy=-4, align="left", dx=3).encode(
+            theta=alt.value(0), radius=alt.Radius("r:Q", scale=None), text="label:N"
+        )
+        hour_labels = alt.Chart(_ticks).mark_text(fontSize=11, color=OTHER).encode(
+            theta=alt.Theta("t:Q", scale=None), radius=alt.value(_R + 22), text="label:N"
+        )
+        wedges = (
+            alt.Chart(_hours.filter(pl.col("who") == who))
+            .mark_arc(color=_colors[who], cornerRadius=2, padAngle=0.03)
+            .encode(
+                theta=alt.Theta("t:Q", scale=None),
+                theta2="t2:Q",
+                radius=alt.Radius("r:Q", scale=None),
+                radius2="r2:Q",
+                opacity=alt.Opacity(
+                    "game_name:N",
+                    title=None,
+                    scale=alt.Scale(domain=_game_order, range=[1, 0.6, 0.3]),
+                    legend=None,  # a legend would wear one player's colour; the section text names the order
+                ),
+                tooltip=[
+                    alt.Tooltip("who:N", title="Player"),
+                    alt.Tooltip("game_name:N", title="Game"),
+                    alt.Tooltip("slot:N", title="Time"),
+                    alt.Tooltip("plays:Q", title="Plays"),
+                    alt.Tooltip("share:Q", title="% of their plays", format=".0f"),
+                ],
+            )
+        )
+        return (rings + ring_labels + wedges + hour_labels).properties(
+            width=2 * _R + 40, height=2 * _R + 40, title=alt.Title(who, anchor="start", color=INK, fontSize=13)
+        )
+
+
+    _who = [w for w in player_scale.domain if w in _hours["who"].unique()]
+    _rows = [alt.hconcat(*[_clock(w) for w in _who[i : i + 2]], spacing=24) for i in range(0, len(_who), 2)]
+    style(alt.vconcat(*_rows, spacing=16))
     return
 
 

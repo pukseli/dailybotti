@@ -35,7 +35,7 @@ and **Players** pickers at the top. Times are Helsinki time.
 - **Form over time**: a 7-day average of the picked score per player, with each day as a dot.
 - **How consistent everyone is**: box plots of every result as a % of the game's max.
 - **Who shows up**: one box per day, player and game; a dash means the game wasn't in the group yet.
-- **Play patterns**: when each player posts each game, by hour.
+- **Play patterns**: a 24-hour clock per player; each hour's wedge is its share of their plays, games stacked.
 - **All results**: the raw table, searchable.
 
 ### 💯 rounds (Size It Up)
