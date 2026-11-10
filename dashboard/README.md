@@ -46,6 +46,14 @@ many shares have fewer or none: the old "Overall Score" format and the Magnitudl
 without them. So the second number mostly says how complete someone's shares are, not how much they played.
 On 2026-11-10 everyone had played 18 Size It Up games, yet had 83, 75, 48 and 31 known rounds.
 
+### Krillion symbols
+
+Each Krillion share has one symbol per round, which the fact sheets count. Best to worst, with points:
+🌟 One in a Krillion 100, 🏮 Deep Cut 85, 🦑 Rare 60, 🐟 Schooler 30, 🤡 Too Clever 15, 🫧 Plankton 10,
+⬛ Miss 0. The sources are in the repo's `plan.md`. 🌟 and 🤡 come only from a fan site and are still
+unconfirmed: as of 2026-11-10 none of the group's 214 results has one, so the 🌟 One in a Krillion and
+🤡 Too Clever tags can't be earned yet.
+
 ### Tags
 
 Each player gets every tag whose rule fits, sorted by priority, and the sheet shows the **top 3**. Equal
