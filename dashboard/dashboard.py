@@ -153,6 +153,32 @@ def _(period, picked, pl, placements, results, timedelta):
     return first_day, last_day, period_placements, period_results
 
 
+@app.cell(hide_code=True)
+def _(period_results, pl):
+    # How steady each player is, shared by the consistency chart and the 🎯 Steady Eddie tag.
+    # Spread is half the height of their box (the middle half of results), averaged over games: per game, because
+    # games score so differently that pooling would count the gap between games as inconsistency. The floor is
+    # their 10th-percentile result: how low a bad day goes. Both need enough results to mean anything.
+    _MIN_PER_GAME, _MIN_RESULTS = 4, 10
+    _per_game = (
+        period_results.group_by("who", "game")
+        .agg(n=pl.len(), iqr=pl.col("pct").quantile(0.75, "linear") - pl.col("pct").quantile(0.25, "linear"))
+        .filter(pl.col("n") >= _MIN_PER_GAME)
+        .group_by("who")
+        .agg(spread=pl.col("iqr").mean() / 2)
+    )
+    consistency = (
+        period_results.group_by("who")
+        .agg(results=pl.len(), floor=pl.col("pct").quantile(0.1, "linear"))
+        .join(_per_game, on="who", how="left")
+        .with_columns(
+            spread=pl.when(pl.col("results") >= _MIN_RESULTS).then("spread"),
+            floor=pl.when(pl.col("results") >= _MIN_RESULTS).then("floor"),
+        )
+    )
+    return (consistency,)
+
+
 @app.cell
 def _(mo, period_placements, period_results, pl):
     _wins = (
@@ -188,6 +214,7 @@ def _(mo):
 def _(
     GAMES,
     KRILLION_SYMBOLS,
+    consistency,
     last_day,
     period_placements,
     period_results,
@@ -248,7 +275,7 @@ def _(
             "wins": (_o["rank"] == 1).sum(),
             "silvers": (_o["rank"] == 2).sum(),
             "avg_pct": _r["pct"].mean(),
-            "pct_spread": _r["pct"].std() if _r.height >= 10 else None,
+            "pct_spread": consistency.filter(pl.col("who") == _w)["spread"].first(),
             "form": (_o.filter(pl.col("day") >= _last_week)["value"].mean() or 0) - (_o["value"].mean() or 0),
             "form_base": _o["value"].mean() or 0,
             "symbols": {s: _symbols.get(s, 0) for s in KRILLION_SYMBOLS},
@@ -584,7 +611,20 @@ def _(mo):
 
 
 @app.cell
-def _(GAMES, alt, period_results, pl, player_scale, style):
+def _(
+    GAMES,
+    INK,
+    OTHER,
+    RULE,
+    alt,
+    consistency,
+    html,
+    mo,
+    period_results,
+    pl,
+    player_scale,
+    style,
+):
     # One chart per game side by side, not a facet: Vega-Lite ignores a facet's sort on box plots,
     # so the games came out in data order in the browser.
     _box = alt.hconcat(
@@ -600,7 +640,34 @@ def _(GAMES, alt, period_results, pl, player_scale, style):
             for _i, _name in enumerate(GAMES.values())
         ]
     )
-    style(_box)
+
+    # Beside the boxes: steadiest first, then whoever doesn't have enough results yet.
+    _colors = dict(zip(player_scale.domain, player_scale.range))
+    _rows = "".join(
+        f"""<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid {RULE}">
+          <span style="width:10px;height:10px;border-radius:50%;background:{_colors[_c["who"]]};flex:none"></span>
+          <span style="flex:1">{html.escape(_c["who"])}</span>"""
+        + (
+            f"""<span style="font-variant-numeric:tabular-nums"><b>±{_c["spread"]:.0f}</b></span>
+          <span style="width:64px;text-align:right;color:{OTHER};font-variant-numeric:tabular-nums">{_c["floor"]:.0f}%</span>"""
+            if _c["spread"] is not None
+            else f'<span style="color:{OTHER}">not enough results yet</span>'
+        )
+        + "</div>"
+        for _c in consistency.filter(pl.col("who").is_in(player_scale.domain))
+        .sort(pl.col("spread").is_null(), "spread")
+        .iter_rows(named=True)
+    )
+    _summary = mo.Html(
+        f"""<div style="font-family:system-ui,sans-serif;font-size:13px;color:{INK};min-width:220px">
+          <div style="display:flex;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:{OTHER};margin-bottom:2px">
+            <span style="flex:1"></span><span>Spread</span><span style="width:64px;text-align:right">Bad day</span>
+          </div>
+          {_rows}
+          <div style="font-size:12px;color:{OTHER};margin-top:6px">Spread: how far their middle half of results strays, in % of max, averaged over games. Bad day: 1 in 10 results is lower.</div>
+        </div>"""
+    )
+    mo.hstack([style(_box), _summary], justify="start", align="center", gap=1.5)
     return
 
 

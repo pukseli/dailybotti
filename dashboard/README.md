@@ -33,7 +33,7 @@ and **Players** pickers at the top. Times are Helsinki time.
 - **Leaderboard**: overall podiums, days, average daily rank, average overall points (each game as a % of its
   max, summed, out of 300; a skipped game counts as 0), the last 14 days, and daily wins per game.
 - **Form over time**: a 7-day average of the picked score per player, with each day as a dot. Beside it, where each line starts and ends in the period and the % change.
-- **How consistent everyone is**: box plots of every result as a % of the game's max.
+- **How consistent everyone is**: box plots of every result as a % of the game's max. Beside them, each player's spread (half their box height, averaged over games with 4+ results) and bad-day floor (10th percentile), once they have 10 results.
 - **Who shows up**: a GitHub-style contribution graph per player; each day's shade is how many of the games they posted.
 - **Play patterns**: a 24-hour clock per player; each hour's wedge is its share of their plays, games stacked.
 - **All results**: the raw table, searchable.
@@ -71,7 +71,7 @@ tags go to everyone tied for the top, and only with a value above 0.
 | 85 | 📅 Never Misses | Played at least 95% of game days | 5 days played |
 | 80 at most | 🔥 On a Streak | Played every day up to the last day of the period, 5 days or more; priority 60 + streak length, capped at 80 | Not shown with 📅 Never Misses |
 | 78 | 📊 Top Scorer | Highest average result as a % of the game's max | 5 results |
-| 72 | 🎯 Steady Eddie | Smallest spread (standard deviation) of results as a % of max | 10 results, 2+ players |
+| 72 | 🎯 Steady Eddie | Smallest spread: half the middle-half range of results as a % of max, averaged over games (same as the consistency panel) | 10 results, 2+ players |
 | 66 | 🥈 Always the Bridesmaid | Most 2nd places on the overall podium | Not shown with 👑 Daily Champ |
 | 62 | 📈 Heating Up | Overall points in the last 7 days at least 10% above their period average | 10 days played |
 | 65–80 | ⏰ Last Minute Larry | At least 25% of plays between 23:00 and midnight; priority 60 + 20 × that share | 5 results |
