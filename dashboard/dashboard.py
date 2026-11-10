@@ -340,14 +340,14 @@ def _(
         color = _colors[who]
         tags = "".join(f'<span class="pf-tag" title="{html.escape(why)}">{html.escape(tag)}</span>' for _, tag, why in player_tags[who])
         games = "".join(_portion(GAMES[g], n, out_of, color) for g, (n, out_of) in f["games"].items() if out_of)
-        # A tiny column chart of the symbol spread, best symbol first. Bars scale to the player's most common
+        # A tiny column chart of the symbol spread, worst symbol first so points rise left to right. Bars scale to the player's most common
         # symbol, so each card shows its own shape; the raw count sits under each bar.
         _peak = max(f["symbols"].values()) or 1
         symbols = "".join(
             f'<div class="pf-sym" title="{name} · {points} points · {f["symbols"][s]}×">'
             f'<span>{s}</span><div class="pf-col"><div style="height:{f["symbols"][s] / _peak * 100:.0f}%;background:{color}"></div></div>'
             f'<b>{f["symbols"][s]}</b></div>'
-            for s, (name, points) in KRILLION_SYMBOLS.items()
+            for s, (name, points) in reversed(KRILLION_SYMBOLS.items())
         )
         size_it_up = (
             f'<div class="pf-row"><span>💯 rounds</span><span><b>{f["hundreds"]}</b> of {f["size_rounds"]} · {f["hundreds"] / f["size_rounds"]:.0%}</span></div>'
@@ -390,7 +390,7 @@ def _(
           .pf-none {{ color:{OTHER}; }}
         </style>
         <div class="pf-grid">{"".join(_sheet(w, f) for w, f in facts.items())}</div>
-        <div style="font-size:12px;color:{OTHER};margin-top:6px;font-family:system-ui,sans-serif">Hover a tag to see why. Krillion symbols run best to worst; 🌟 and 🤡 point values aren't confirmed yet.</div>
+        <div style="font-size:12px;color:{OTHER};margin-top:6px;font-family:system-ui,sans-serif">Hover a tag to see why. Krillion symbols run from lowest to highest points; 🌟 and 🤡 point values aren't confirmed yet.</div>
         """
     )
     return
