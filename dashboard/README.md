@@ -58,8 +58,11 @@ share text.
 
 ### 3. Check before sharing the link
 
-- [ ] Open the WASM export in a real browser (`python -m http.server --directory site`). Not yet verified:
-      `great-tables` and polars time zones under Pyodide, the "Form over time" line chart, and the box plots'
-      game order (Eraly, Krillion, Size It Up), which looked wrong in a static export.
-- [ ] Load time and layout on a phone: the first visit downloads the Python runtime.
+- [x] Open the WASM export in a real browser (checked 2026-11-10 in Chromium, desktop and phone width, with
+      sample data). Fixed on the way: great-tables isn't bundled with Pyodide, so the notebook installs it with
+      micropip in the browser; the browser build of polars has no `str.json_decode` and overflows
+      `pl.date_range` (it's 32-bit), so those are done in Python; the box plots are three side-by-side charts
+      because Vega-Lite ignored the facet's game order.
+- [ ] Load time on a real phone: the first visit downloads about 30 MB (Python runtime + polars), cached after.
+      Layout at phone width is fine; wide tables scroll sideways.
 - [ ] Decide who goes on the Access allowlist, and whether daily is often enough (an hourly run costs nothing).

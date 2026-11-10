@@ -5,9 +5,16 @@ app = marimo.App(width="medium", app_title="Daily games stats")
 
 
 @app.cell
-def _():
+async def _():
     import html
+    import sys
     from datetime import timedelta
+
+    # In the published (browser) version, great-tables isn't bundled with Pyodide, so fetch it from PyPI.
+    if "pyodide" in sys.modules:
+        import micropip
+
+        await micropip.install("great-tables")
 
     import altair as alt
     import great_tables as gt
@@ -130,7 +137,7 @@ def _(meta, mo, results):
 def _(mo, players):
     period = mo.ui.dropdown({"Last 7 days": 7, "Last 30 days": 30, "All time": 0}, value="Last 30 days", label="Period")
     picked = mo.ui.multiselect(options=players["who"].to_list(), value=players["who"].to_list(), label="Players")
-    mo.hstack([period, picked], justify="start", gap=2)
+    mo.hstack([period, picked], justify="start", gap=2, wrap=True)
     return period, picked
 
 
@@ -162,8 +169,8 @@ def _(mo, period_placements, period_results, pl):
             mo.stat(value=str(period_results["who"].n_unique()), label="Players"),
             mo.stat(value=_leader, label="Most daily wins"),
         ],
-        widths="equal",
         gap=1,
+        wrap=True,
     )
     return
 
@@ -188,24 +195,30 @@ def _(
     player_scale,
     timedelta,
 ):
+    import json as _json
+
     # The numbers behind each fact sheet, over the period and the picked players.
     # Portions are out of the days that had any result, so a game nobody could play yet doesn't count against anyone.
     _game_days = dict(period_results.group_by("game").agg(pl.col("day").n_unique()).iter_rows())
     _all_days = period_results["day"].n_unique()
 
     # Rounds come as JSON: seven symbols for Krillion, five scores for Size It Up. Older rows may have none.
+    # Parsed in Python because the browser build of polars has no str.json_decode.
+    def _rounds(game, column, dtype):
+        _rows = period_results.filter(pl.col("game") == game, pl.col("rounds_json").is_not_null())
+        return pl.DataFrame(
+            [(_w, _json.loads(_j)) for _w, _j in _rows.select("who", "rounds_json").iter_rows()],
+            schema={"who": pl.String, column: pl.List(dtype)},
+            orient="row",
+        )
+
     _krillion = (
-        period_results.filter(pl.col("game") == "krillion", pl.col("rounds_json").is_not_null())
-        .select("who", symbol=pl.col("rounds_json").str.json_decode(pl.List(pl.String)))
+        _rounds("krillion", "symbol", pl.String)
         .explode("symbol")
         # Some phones send ⬛ with an emoji presentation selector (⬛ + U+FE0F); it's the same symbol.
         .with_columns(pl.col("symbol").str.replace_all("\ufe0f", "", literal=True))
     )
-    _size_it_up = (
-        period_results.filter(pl.col("game") == "sizeitup", pl.col("rounds_json").is_not_null())
-        .select("who", points=pl.col("rounds_json").str.json_decode(pl.List(pl.Int64)))
-        .explode("points")
-    )
+    _size_it_up = _rounds("sizeitup", "points", pl.Int64).explode("points")
     _overall = period_placements.filter(pl.col("category") == "overall")
     _last_week = last_day - timedelta(days=6)
 
@@ -534,17 +547,21 @@ def _(mo):
 
 
 @app.cell
-def _(GAMES, alt, period_results, player_scale, style):
-    _box = (
-        alt.Chart(period_results)
-        .mark_boxplot(extent="min-max", size=16, median={"color": "white", "strokeWidth": 2}, box={"cornerRadius": 4})
-        .encode(
-            x=alt.X("who:N", title=None, sort=player_scale.domain, axis=alt.Axis(labelAngle=-40)),
-            y=alt.Y("pct:Q", title="% of max", scale=alt.Scale(domain=[0, 100])),
-            color=alt.Color("who:N", scale=player_scale, legend=None),
-        )
-        .properties(width=220, height=260)
-        .facet(column=alt.Column("game_name:N", title=None, sort=list(GAMES.values())))
+def _(GAMES, alt, period_results, pl, player_scale, style):
+    # One chart per game side by side, not a facet: Vega-Lite ignores a facet's sort on box plots,
+    # so the games came out in data order in the browser.
+    _box = alt.hconcat(
+        *[
+            alt.Chart(period_results.filter(pl.col("game_name") == _name), title=_name)
+            .mark_boxplot(extent="min-max", size=16, median={"color": "white", "strokeWidth": 2}, box={"cornerRadius": 4})
+            .encode(
+                x=alt.X("who:N", title=None, sort=player_scale.domain, axis=alt.Axis(labelAngle=-40)),
+                y=alt.Y("pct:Q", title="% of max" if _i == 0 else None, scale=alt.Scale(domain=[0, 100])),
+                color=alt.Color("who:N", scale=player_scale, legend=None),
+            )
+            .properties(width=220, height=260)
+            for _i, _name in enumerate(GAMES.values())
+        ]
     )
     style(_box)
     return
@@ -573,13 +590,19 @@ def _(
     player_scale,
     results,
 ):
+    import datetime as _dt
+
     # One box per player, game and day. A player can post each game once a day, so a box is either ticked or not.
     # Days before a game's first result in the group get a dash instead: there was nothing to miss.
     _who = [w for w in player_scale.domain if w in picked.value]
     _started = dict(results.group_by("game").agg(pl.col("day").min()).iter_rows())
     _posted = period_results.select("day", "who", "game").with_columns(posted=pl.lit(True))
     attendance = (
-        pl.DataFrame({"day": pl.date_range(first_day, last_day, eager=True)})
+        # A Python list, not pl.date_range: the browser build of polars is 32-bit and overflows on a 1-day step.
+        pl.DataFrame(
+            {"day": [first_day + _dt.timedelta(days=_i) for _i in range((last_day - first_day).days + 1)]},
+            schema={"day": pl.Date},
+        )
         .join(pl.DataFrame({"who": _who}), how="cross")
         .join(pl.DataFrame({"game": list(GAMES)}), how="cross")
         .join(_posted, on=["day", "who", "game"], how="left")
