@@ -605,15 +605,6 @@ def _(GAMES, alt, period_results, pl, player_scale, style):
 
 
 @app.cell
-def _(mo):
-    mo.md("""
-    ## Who shows up
-    A contribution graph for each player: one square per day, weeks running left to right. The darker the square, the more of the day's games they posted.
-    """)
-    return
-
-
-@app.cell
 def _(
     GAMES,
     INK,
@@ -706,7 +697,7 @@ def _(
     _legend = "".join(
         f'<span style="width:11px;height:11px;border-radius:2px;background:{OTHER if _s else RULE};opacity:{_s or 1}"></span>' for _s in _shade
     )
-    mo.vstack(
+    attendance_view = mo.vstack(
         [
             style(alt.concat(*[_graph(w) for w in _who], columns=2, spacing=28)),
             mo.Html(
@@ -715,16 +706,7 @@ def _(
             ),
         ]
     )
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md("""
-    ## Play patterns
-    When everyone posts, as a 24-hour clock in Helsinki time with midnight at the top. Each wedge is an hour; its size is that hour's share of the player's plays, with games stacked from the centre out: Eraly darkest, then Krillion, then Size It Up palest. Hover a wedge for the numbers.
-    """)
-    return
+    return (attendance_view,)
 
 
 @app.cell(hide_code=True)
@@ -806,7 +788,39 @@ def _(GAMES, INK, OTHER, RULE, alt, period_results, pl, player_scale, style):
 
     _who = [w for w in player_scale.domain if w in _hours["who"].unique()]
     _rows = [alt.hconcat(*[_clock(w) for w in _who[i : i + 2]], spacing=24) for i in range(0, len(_who), 2)]
-    style(alt.vconcat(*_rows, spacing=16))
+    play_patterns = style(alt.vconcat(*_rows, spacing=16))
+    return (play_patterns,)
+
+
+@app.cell
+def _(attendance_view, mo, play_patterns):
+    # Two views of the same habit side by side: which days everyone plays, and at what time. Wraps on narrow screens.
+    mo.hstack(
+        [
+            mo.vstack(
+                [
+                    mo.md("""
+    ## Who shows up
+    A contribution graph for each player: one square per day, weeks running left to right. The darker the square, the more of the day's games they posted.
+    """),
+                    attendance_view,
+                ]
+            ),
+            mo.vstack(
+                [
+                    mo.md("""
+    ## Play patterns
+    A 24-hour clock in Helsinki time, midnight at the top. Each wedge's size is that hour's share of the player's plays, games stacked from the centre out: Eraly darkest, Size It Up palest.
+    """),
+                    play_patterns,
+                ]
+            ),
+        ],
+        widths="equal",
+        align="start",
+        gap=2,
+        wrap=True,
+    )
     return
 
 
