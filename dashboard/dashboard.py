@@ -892,6 +892,151 @@ def _(attendance_view, mo, play_patterns):
 
 
 @app.cell
+def _(GAMES, mo):
+    hour_game = mo.ui.dropdown({"All games": "all", **{name: game for game, name in GAMES.items()}}, value="All games", label="Game")
+    mo.vstack(
+        [
+            mo.md("""
+    ## When the best scores happen
+    Every result by the time of day it was posted (Helsinki time), with the hourly average across the group.
+    """),
+            hour_game,
+        ]
+    )
+    return (hour_game,)
+
+
+@app.cell
+def _(
+    GAMES,
+    INK,
+    OTHER,
+    RULE,
+    alt,
+    hour_game,
+    html,
+    mo,
+    period_results,
+    pl,
+    player_scale,
+    style,
+):
+    _all = hour_game.value == "all"
+    _source = period_results if _all else period_results.filter(pl.col("game") == hour_game.value)
+    _y_max = 100 if _all else int(_source["max_score"].max() or 700)
+    _y_title = "% of max" if _all else f"{GAMES[hour_game.value]} score"
+    _unit = "%" if _all else ""
+
+    _points = _source.with_columns(
+        val=pl.col("pct").round(1) if _all else pl.col("score").cast(pl.Float64),
+        clock=pl.col("submitted").dt.hour() + pl.col("submitted").dt.minute() / 60,
+        time_str=pl.col("submitted").dt.strftime("%H:%M"),
+        day_str=pl.col("day").dt.strftime("%Y-%m-%d"),
+    )
+    _hourly = (
+        _points.group_by("hour")
+        .agg(plays=pl.len(), avg=pl.col("val").mean().round(1))
+        .filter(pl.col("plays") >= 2)
+        .sort("hour")
+        .with_columns(
+            clock=pl.col("hour") + 0.5,
+            slot=pl.format(
+                "{}:00–{}:00",
+                pl.col("hour").cast(pl.String).str.zfill(2),
+                ((pl.col("hour") + 1) % 24).cast(pl.String).str.zfill(2),
+            ),
+        )
+    )
+
+    _x = alt.X(
+        "clock:Q",
+        title="Time of day (Helsinki)",
+        scale=alt.Scale(domain=[0, 24]),
+        axis=alt.Axis(
+            values=[0, 3, 6, 9, 12, 15, 18, 21, 24],
+            labelExpr="(datum.value % 24 < 10 ? '0' : '') + (datum.value % 24) + ':00'",
+        ),
+    )
+    _dots = (
+        alt.Chart(_points)
+        .mark_circle(size=32, opacity=0.35)
+        .encode(
+            x=_x,
+            y=alt.Y("val:Q", title=_y_title, scale=alt.Scale(domain=[0, _y_max])),
+            color=alt.Color("who:N", scale=player_scale, title=None),
+            tooltip=[
+                alt.Tooltip("who:N", title="Player"),
+                alt.Tooltip("game_name:N", title="Game"),
+                alt.Tooltip("day_str:N", title="Day"),
+                alt.Tooltip("time_str:N", title="Time"),
+                alt.Tooltip("val:Q", title="Score (%)" if _all else "Score", format=".0f"),
+            ],
+        )
+    )
+    _line = alt.Chart(_hourly).mark_line(color=INK, strokeWidth=2, interpolate="monotone").encode(x=_x, y="avg:Q")
+    _avg_pts = (
+        alt.Chart(_hourly)
+        .mark_point(color=INK, filled=True, size=56)
+        .encode(
+            x=_x,
+            y="avg:Q",
+            tooltip=[
+                alt.Tooltip("slot:N", title="Hour"),
+                alt.Tooltip("avg:Q", title="Hourly avg (%)" if _all else "Hourly avg", format=".1f"),
+                alt.Tooltip("plays:Q", title="Results"),
+            ],
+        )
+    )
+    _chart = style(alt.layer(_dots, _line, _avg_pts).properties(width="container", height=300))
+
+    # Beside the chart: each player's highest-scoring hour (with at least 3 results) and how it compares to their own mean.
+    _MIN_PLAYS = 3
+    _own_avg = dict(_points.group_by("who").agg(pl.col("val").mean()).iter_rows())
+    _best = (
+        _points.group_by("who", "hour")
+        .agg(plays=pl.len(), avg=pl.col("val").mean())
+        .filter(pl.col("plays") >= _MIN_PLAYS)
+        .sort(["avg", "plays"], descending=True)
+        .unique(subset=["who"], keep="first")
+        .with_columns(
+            slot=pl.format(
+                "{}:00–{}:00",
+                pl.col("hour").cast(pl.String).str.zfill(2),
+                ((pl.col("hour") + 1) % 24).cast(pl.String).str.zfill(2),
+            )
+        )
+    )
+    _by_who = {r["who"]: r for r in _best.iter_rows(named=True)}
+    _colors = dict(zip(player_scale.domain, player_scale.range))
+    _active = set(_points["who"].unique().to_list())
+    _rows = "".join(
+        f"""<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid {RULE}">
+          <span style="width:10px;height:10px;border-radius:50%;background:{_colors[_w]};flex:none"></span>
+          <span style="flex:1">{html.escape(_w)}</span>"""
+        + (
+            f"""<span style="color:{OTHER};font-variant-numeric:tabular-nums">{_by_who[_w]["slot"]}</span>
+          <span style="width:76px;text-align:right;font-variant-numeric:tabular-nums"><b>{_by_who[_w]["avg"]:.0f}{_unit}</b> <span style="color:{OTHER}">({_by_who[_w]["avg"] - _own_avg[_w]:+.0f}{_unit})</span></span>"""
+            if _w in _by_who
+            else f'<span style="color:{OTHER}">not enough results yet</span>'
+        )
+        + "</div>"
+        for _w in player_scale.domain
+        if _w in _active
+    )
+    _summary = mo.Html(
+        f"""<div style="font-family:system-ui,sans-serif;font-size:13px;color:{INK};min-width:240px">
+          <div style="display:flex;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:{OTHER};margin-bottom:2px">
+            <span style="flex:1"></span><span>Best hour</span><span style="width:76px;text-align:right">Avg (vs own)</span>
+          </div>
+          {_rows}
+          <div style="font-size:12px;color:{OTHER};margin-top:6px">Best hour: highest-scoring hour with at least {_MIN_PLAYS} results, and how it compares to the player's own average.</div>
+        </div>"""
+    )
+    mo.hstack([_chart, _summary], widths=[4, 1], align="center", gap=1.5)
+    return
+
+
+@app.cell
 def _(mo):
     mo.md("""
     ## All results

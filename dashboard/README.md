@@ -36,6 +36,7 @@ and **Players** pickers at the top. Times are Helsinki time.
 - **How consistent everyone is**: box plots of every result as a % of the game's max. Beside them, each player's spread (half their box height, averaged over games with 4+ results) and bad-day floor (10th percentile), once they have 10 results.
 - **Who shows up**: a GitHub-style contribution graph per player; each day's shade is how many of the games they posted.
 - **Play patterns**: a 24-hour clock per player; each hour's wedge is its share of their plays, games stacked.
+- **When the best scores happen**: every result by time of day (00:00–24:00) with the hourly average across the group, and beside it each player's highest-scoring hour (with 3+ results) compared to their own average.
 - **All results**: the raw table, searchable.
 
 ### 💯 rounds (Size It Up)
