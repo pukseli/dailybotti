@@ -423,4 +423,57 @@ describe("matto flow", () => {
     expect(me).toContain("Daily Mättö");
     expect(me).toContain("Overall");
   });
+
+  it("plays a full /testimatto game without saving anything to the database", async () => {
+    await register();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/testimatto"));
+
+    const announce = tg.sentTo(GROUP).map((c) => c.params.text as string).find((t) => t.includes("(testipeli)"));
+    expect(announce).toBeTruthy();
+
+    for (const p of PLAYERS) await draftFive(p);
+
+    for (const p of PLAYERS) {
+      const messageId = firstBallotMessageId(p.id);
+      for (let i = 0; i < 3; i++) {
+        const ballot = latestKeyboard(p.id);
+        expect(String(ballot.params.text)).toContain(DAY);
+        expect(String(ballot.params.text)).not.toContain(`test:${DAY}`);
+        const pick = (ballot.params.reply_markup.inline_keyboard as { callback_data: string }[][])
+          .flat()
+          .find((b) => b.callback_data.startsWith("mv:"));
+        if (!pick) break;
+        await handleUpdate(makeCtx(tg, FRI_NOON), tap(p, pick.callback_data, messageId));
+      }
+    }
+
+    const results = tg.sentTo(GROUP).map((c) => c.params.text as string).find((t) => t.includes("tulokset"));
+    expect(results).toContain("(testipeli – ei tallenneta)");
+    expect(results).toContain(DAY);
+    expect(results).not.toContain(`test:${DAY}`);
+
+    const placements = await env.DB.prepare("SELECT COUNT(*) AS n FROM placements WHERE category = 'matto'").first<{ n: number }>();
+    expect(placements?.n).toBe(0);
+
+    const statChanges = await env.DB.prepare("SELECT COUNT(*) AS n FROM matto_stat_changes").first<{ n: number }>();
+    expect(statChanges?.n).toBe(0);
+
+    const daysLeft = await env.DB.prepare("SELECT COUNT(*) AS n FROM matto_days").first<{ n: number }>();
+    expect(daysLeft?.n).toBe(0);
+
+    const offersLeft = await env.DB.prepare("SELECT COUNT(*) AS n FROM matto_offers").first<{ n: number }>();
+    expect(offersLeft?.n).toBe(0);
+
+    const teamsLeft = await env.DB.prepare("SELECT COUNT(*) AS n FROM matto_teams").first<{ n: number }>();
+    expect(teamsLeft?.n).toBe(0);
+
+    const matchupsLeft = await env.DB.prepare("SELECT COUNT(*) AS n FROM matto_matchups").first<{ n: number }>();
+    expect(matchupsLeft?.n).toBe(0);
+
+    const votesLeft = await env.DB.prepare("SELECT COUNT(*) AS n FROM matto_votes").first<{ n: number }>();
+    expect(votesLeft?.n).toBe(0);
+
+    const ballotsLeft = await env.DB.prepare("SELECT COUNT(*) AS n FROM matto_ballots").first<{ n: number }>();
+    expect(ballotsLeft?.n).toBe(0);
+  });
 });

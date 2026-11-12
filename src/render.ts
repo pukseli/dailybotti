@@ -598,6 +598,7 @@ export function renderCommands(): string {
     "",
     "<b>⚔️ Daily Mättö</b>",
     "• <code>/matto</code> – Käynnistä peli ryhmässä, tai pyydä draft/äänestyslippu yksityisesti",
+    "• <code>/testimatto</code> – Käynnistä testipeli (ei tallenneta tuloksia eikä statsimuutoksia kantaan)",
     "• <code>/mattotilanne</code> – Draftin tai äänestyksen tilanne (tai tulokset)",
     "• <code>/mattoaanesta</code> – Pyydä uusi mättö-äänestyslippu yksityisesti",
     "• <code>/mattonollaa</code> – Nollaa äänestys (draftit säilyvät) tai <code>/mattonollaa kaikki</code> koko päivän peli",

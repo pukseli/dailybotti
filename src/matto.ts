@@ -21,6 +21,18 @@ export const RANDOM_PER_DEAL = 2;
 
 const TEAM_LABELS = ["Alfa", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel"];
 
+export function isTestMattoDay(day: string): boolean {
+  return day.startsWith("test:");
+}
+
+export function testMattoDayKey(day: string): string {
+  return isTestMattoDay(day) ? day : `test:${day}`;
+}
+
+function displayDay(day: string): string {
+  return day.replace(/^test:/, "");
+}
+
 // ---------- pure helpers (tested) ----------
 
 /** Fisher–Yates shuffle; does not mutate the input. */
@@ -428,8 +440,9 @@ function renderDraftCard(opts: {
   forced: boolean;
   keptOffers: OfferRow[];
 }): { text: string; keyboard: InlineKeyboardButton[][] } {
+  const testTag = isTestMattoDay(opts.day) ? " (testipeli)" : "";
   const lines = [
-    `⚔️ <b>Daily Mättö</b> · draft ${opts.day}`,
+    `⚔️ <b>Daily Mättö${testTag}</b> · draft ${displayDay(opts.day)}`,
     "",
     `Hahmo ${opts.position + 1}/${OFFER_COUNT}: <b>${escapeHtml(opts.characterName)}</b>`,
     `📊 <code>${formatStats(opts.characterStats)}</code>`,
@@ -463,8 +476,9 @@ function renderDraftCard(opts: {
 }
 
 function renderDraftDone(day: string, chars: OfferRow[]): string {
+  const testTag = isTestMattoDay(day) ? " (testipeli)" : "";
   return [
-    `⚔️ <b>Daily Mättö</b> · draft valmis · ${day}`,
+    `⚔️ <b>Daily Mättö${testTag}</b> · draft valmis · ${displayDay(day)}`,
     "",
     `Joukkueesi (${KEEP_COUNT}):`,
     ...chars.map((c) => `• <b>${escapeHtml(c.name)}</b> — <code>${formatStats(c)}</code>`),
@@ -473,11 +487,13 @@ function renderDraftDone(day: string, chars: OfferRow[]): string {
   ].join("\n");
 }
 
-function renderAnnouncement(botUsername: string | null, startedByName: string | null): string {
+function renderAnnouncement(botUsername: string | null, startedByName: string | null, isTest = false): string {
   const bot = botUsername ? `@${escapeHtml(botUsername)}` : "minut";
   const who = startedByName ? `${escapeHtml(startedByName)} käynnisti` : "Viikon";
-  return [
-    `⚔️ <b>Daily Mättö alkaa!</b>`,
+  const title = isTest ? `⚔️ <b>Daily Mättö (testipeli) alkaa!</b>` : `⚔️ <b>Daily Mättö alkaa!</b>`;
+  const lines = [
+    title,
+    ...(isTest ? ["🧪 <i>Testipeli — tuloksia tai hahmojen statsimuutoksia ei tallenneta tietokantaan.</i>"] : []),
     "",
     `${who} mättö-pelin. Jokainen saa yksityisviestinä ${OFFER_COUNT} hahmoa yksi kerrallaan — pidä tai ohita, kunnes joukkueessa on ${KEEP_COUNT}.`,
     `Tarjouksissa on vahvoja, viisaita ja heikkoja hahmoja (järjestys sekoitettu).`,
@@ -485,7 +501,8 @@ function renderAnnouncement(botUsername: string | null, startedByName: string | 
     `Draft ja äänestys toimivat myös ilman nappeja: vastaa botille <code>pidä</code>/<code>ohita</code>, äänestyksessä joukkueen nimellä (esim. <code>Alfa</code>).`,
     `Draft päättyy klo ${DRAFT_DEADLINE} (tai heti kun kaikki ovat valmiita). Äänestyksessä teema paljastuu; et äänestä oman joukkueesi otteluita.`,
     `Jos et ole avannut ${bot} yksityisesti, avaa ja paina Start.`,
-  ].join("\n");
+  ];
+  return lines.join("\n");
 }
 
 function renderBallot(opts: {
@@ -498,8 +515,9 @@ function renderBallot(opts: {
   labels: Map<number, string>;
   roster: Map<number, OfferRow[]>;
 }): { text: string; keyboard: InlineKeyboardButton[][] } {
+  const testTag = isTestMattoDay(opts.day) ? " (testipeli)" : "";
   const lines = [
-    `⚔️ <b>Daily Mättö</b> · äänestys · ${opts.day}`,
+    `⚔️ <b>Daily Mättö${testTag}</b> · äänestys · ${displayDay(opts.day)}`,
     `<b>Teema:</b> ${escapeHtml(opts.theme)}`,
     `🎲 <b>Panos:</b> ${formatThemeStakes(opts.winStat, opts.loseStat)}`,
     "<i>Joukkueiden omistajat paljastetaan tuloksissa. Et äänestä otteluita, joissa oma joukkueesi on mukana.</i>",
@@ -557,10 +575,14 @@ function renderVoteStatus(opts: {
   phase: "draft" | "vote";
   drafted: { id: number; done: boolean }[];
 }): string {
+  const test = isTestMattoDay(opts.day);
+  const testTag = test ? " (testipeli)" : "";
+  const cmd = test ? "/testimatto" : "/matto";
+  const shownDay = displayDay(opts.day);
   if (opts.phase === "draft") {
     const done = opts.drafted.filter((d) => d.done);
     const lines = [
-      `⚔️ <b>Daily Mättö</b> · draft käynnissä · ${opts.day}`,
+      `⚔️ <b>Daily Mättö${testTag}</b> · draft käynnissä · ${shownDay}`,
       `Valitse ${KEEP_COUNT} hahmoa yksityisviestissä. Draft päättyy klo ${DRAFT_DEADLINE} tai kun kaikki ovat valmiita.`,
       "",
       `Valmiit (${done.length}/${opts.drafted.length}): ${done.length ? done.map((d) => nameOf(opts.names, d.id)).join(", ") : "–"}`,
@@ -569,7 +591,7 @@ function renderVoteStatus(opts: {
       const bot = opts.botUsername ? `@${escapeHtml(opts.botUsername)}` : "minut";
       lines.push(
         "",
-        `⚠️ En saanut lähetettyä draftia: ${opts.unreachable.map((id) => nameOf(opts.names, id)).join(", ")}. Avaa ${bot}, paina Start ja lähetä /matto.`,
+        `⚠️ En saanut lähetettyä draftia: ${opts.unreachable.map((id) => nameOf(opts.names, id)).join(", ")}. Avaa ${bot}, paina Start ja lähetä ${cmd}.`,
       );
     }
     return lines.join("\n");
@@ -578,9 +600,9 @@ function renderVoteStatus(opts: {
   const done = opts.voters.filter((v) => v.done);
   const stakes = opts.winStat && opts.loseStat ? `🎲 <b>Panos:</b> ${formatThemeStakes(opts.winStat, opts.loseStat)}` : "";
   const lines = opts.closed
-    ? [`⚔️ <b>Daily Mättö</b> · äänestys päättyi · ${opts.day}`]
+    ? [`⚔️ <b>Daily Mättö${testTag}</b> · äänestys päättyi · ${shownDay}`]
     : [
-        `⚔️ <b>Daily Mättö</b> · äänestys käynnissä · ${opts.day}`,
+        `⚔️ <b>Daily Mättö${testTag}</b> · äänestys käynnissä · ${shownDay}`,
         opts.theme ? `<b>Teema:</b> ${escapeHtml(opts.theme)}` : "",
         stakes,
         `Joukkueet anonyymejä; et äänestä oman joukkueesi otteluita. Äänestys päättyy, kun kaikki ovat äänestäneet, viimeistään ${closesLabel(opts.closeTime)}.`,
@@ -590,7 +612,7 @@ function renderVoteStatus(opts: {
     const bot = opts.botUsername ? `@${escapeHtml(opts.botUsername)}` : "minut";
     lines.push(
       "",
-      `⚠️ En saanut lähetettyä äänestyslippua: ${opts.unreachable.map((id) => nameOf(opts.names, id)).join(", ")}. Avaa ${bot}, paina Start ja lähetä /matto.`,
+      `⚠️ En saanut lähetettyä äänestyslippua: ${opts.unreachable.map((id) => nameOf(opts.names, id)).join(", ")}. Avaa ${bot}, paina Start ja lähetä ${cmd}.`,
     );
   }
   return lines.join("\n");
@@ -607,11 +629,13 @@ function renderResults(opts: {
   labels: Map<number, string>;
   roster: Map<number, OfferRow[]>;
 }): string {
+  const test = isTestMattoDay(opts.day);
+  const testTag = test ? " (testipeli – ei tallenneta)" : "";
   const lines = [
-    `⚔️ <b>Daily Mättö – tulokset</b> · ${opts.day}`,
+    `⚔️ <b>Daily Mättö – tulokset${testTag}</b> · ${displayDay(opts.day)}`,
     "",
     `<b>Teema:</b> ${escapeHtml(opts.theme)}`,
-    `🎲 <b>Statsimuutokset:</b> ${formatThemeStakes(opts.winStat, opts.loseStat)}`,
+    `🎲 <b>Statsimuutokset${test ? " (ei tallennettu)" : ""}:</b> ${formatThemeStakes(opts.winStat, opts.loseStat)}`,
     "",
     "<b>Sijoitukset</b>",
   ];
@@ -682,6 +706,7 @@ async function dealForPlayer(
 
 /** Starts a contest for `day`. Returns an error message, or null on success. */
 export async function startMatto(ctx: Ctx, settings: Settings, day: string, startedBy: number | null): Promise<string | null> {
+  const isTest = isTestMattoDay(day);
   const existing = await getMattoDay(ctx.db, day);
   if (existing && !existing.closed_at) return "Daily Mättö on jo käynnissä tänään.";
   if (existing?.closed_at) return "Tämän päivän mättö on jo pelattu.";
@@ -713,7 +738,9 @@ export async function startMatto(ctx: Ctx, settings: Settings, day: string, star
     )
     .bind(day, themeId, startedBy)
     .run();
-  await claimWeek(ctx.db, day);
+  if (!isTest) {
+    await claimWeek(ctx.db, day);
+  }
 
   for (const p of players) {
     await dealForPlayer(ctx.db, day, p.id, strong, weak, wise);
@@ -721,7 +748,7 @@ export async function startMatto(ctx: Ctx, settings: Settings, day: string, star
 
   const names = displayNames(players);
   const starterName = startedBy !== null ? (names.get(startedBy) ?? null) : null;
-  const sent = await sendToGroup(ctx, settings, renderAnnouncement(settings.botUsername, starterName));
+  const sent = await sendToGroup(ctx, settings, renderAnnouncement(settings.botUsername, starterName, isTest));
   await ctx.db.prepare("UPDATE matto_days SET announce_message_id = ? WHERE day = ?").bind(sent.message_id, day).run();
 
   const unreachable: number[] = [];
@@ -919,7 +946,7 @@ export async function openMattoVote(ctx: Ctx, settings: Settings, day: string): 
     await sendToGroup(
       ctx,
       settings,
-      `⚔️ Daily Mättö (${day}): äänestykseen tarvitaan vähintään 3 valmista joukkuetta (nyt ${teams.length}), joten äänestystä ei järjestetä.`,
+      `⚔️ Daily Mättö (${displayDay(day)}): äänestykseen tarvitaan vähintään 3 valmista joukkuetta (nyt ${teams.length}), joten äänestystä ei järjestetä.`,
     );
     return;
   }
@@ -1067,6 +1094,7 @@ async function applyMattoStatChanges(
 }
 
 async function closeMatto(ctx: Ctx, settings: Settings, day: string, cancelled: boolean): Promise<void> {
+  const isTest = isTestMattoDay(day);
   const closed = await ctx.db
     .prepare(
       `UPDATE matto_days SET closed_at = ?, vote_opened_at = CASE WHEN ? THEN NULL ELSE vote_opened_at END
@@ -1078,6 +1106,7 @@ async function closeMatto(ctx: Ctx, settings: Settings, day: string, cancelled: 
 
   if (cancelled) {
     await refreshGroupStatus(ctx, settings, day);
+    if (isTest) await wipeMattoDay(ctx.db, day);
     return;
   }
 
@@ -1100,21 +1129,26 @@ async function closeMatto(ctx: Ctx, settings: Settings, day: string, cancelled: 
   );
   const counted = new Map([...scores].filter(([, s]) => s.max > 0));
   if (counted.size === 0) {
-    await sendToGroup(ctx, settings, `⚔️ Daily Mättö (${day}): äänestys päättyi, mutta ääniä ei tullut.`);
+    await sendToGroup(ctx, settings, `⚔️ Daily Mättö (${displayDay(day)}): äänestys päättyi, mutta ääniä ei tullut.`);
+    if (isTest) await wipeMattoDay(ctx.db, day);
     return;
   }
 
   const standings = rank([...counted].map(([playerId, s]) => ({ playerId, value: mattoPercent(s) })));
-  await savePlacements(
-    ctx.db,
-    day,
-    standings.map((s) => ({ category: "matto" as const, playerId: s.playerId, rank: s.rank, value: s.value })),
-    ["matto"],
-  );
+  if (!isTest) {
+    await savePlacements(
+      ctx.db,
+      day,
+      standings.map((s) => ({ category: "matto" as const, playerId: s.playerId, rank: s.rank, value: s.value })),
+      ["matto"],
+    );
+  }
 
   const initialRoster = await rosterMap(ctx.db, day, teamIds);
-  await applyMattoStatChanges(ctx.db, day, standings, initialRoster, row.win_stat, row.lose_stat);
-  const updatedRoster = await rosterMap(ctx.db, day, teamIds);
+  if (!isTest) {
+    await applyMattoStatChanges(ctx.db, day, standings, initialRoster, row.win_stat, row.lose_stat);
+  }
+  const updatedRoster = isTest ? initialRoster : await rosterMap(ctx.db, day, teamIds);
 
   const names = displayNames(players);
   const labels = await labelMap(finished);
@@ -1133,13 +1167,17 @@ async function closeMatto(ctx: Ctx, settings: Settings, day: string, cancelled: 
       roster: updatedRoster,
     }),
   );
+
+  if (isTest) {
+    await wipeMattoDay(ctx.db, day);
+  }
 }
 
 // ---------- tick ----------
 
 export async function mattoTick(ctx: Ctx, settings: Settings): Promise<void> {
   for (const row of await openMattoDays(ctx.db)) {
-    if (!dayIsClosed(ctx, row.day)) continue;
+    if (!dayIsClosed(ctx, displayDay(row.day))) continue;
     if (row.vote_opened_at) await closeMatto(ctx, settings, row.day, false);
     else await closeMatto(ctx, settings, row.day, true);
   }
@@ -1147,9 +1185,11 @@ export async function mattoTick(ctx: Ctx, settings: Settings): Promise<void> {
   const { date: day, time } = localParts(ctx.now, ctx.timeZone);
   if (dayIsClosed(ctx, day)) return;
 
-  const open = await getMattoDay(ctx.db, day);
-  if (open && !open.closed_at && !open.vote_opened_at && time >= DRAFT_DEADLINE) {
-    await openMattoVote(ctx, settings, day);
+  for (const candidateDay of [day, testMattoDayKey(day)]) {
+    const open = await getMattoDay(ctx.db, candidateDay);
+    if (open && !open.closed_at && !open.vote_opened_at && time >= DRAFT_DEADLINE) {
+      await openMattoVote(ctx, settings, candidateDay);
+    }
   }
 
   if (time < DRAFT_TIME) return;
@@ -1173,19 +1213,19 @@ export async function handleMattoTap(ctx: Ctx, settings: Settings, cq: CallbackQ
   const answer = (text: string) => tryCall(ctx, "answerCallbackQuery", { callback_query_id: cq.id, text });
   const data = cq.data ?? "";
 
-  const draft = /^m([ks]):(\d{4}-\d{2}-\d{2}):(\d+)$/.exec(data);
+  const draft = /^m([ks]):((?:test:)?\d{4}-\d{2}-\d{2}):(\d+)$/.exec(data);
   if (draft) {
     await handleDraftTap(ctx, settings, cq, draft[1] as "k" | "s", draft[2]!, Number(draft[3]), answer);
     return;
   }
 
-  const reset = /^mr:(\d{4}-\d{2}-\d{2})$/.exec(data);
+  const reset = /^mr:((?:test:)?\d{4}-\d{2}-\d{2})$/.exec(data);
   if (reset) {
     await handleVoteReset(ctx, settings, cq, reset[1]!, answer);
     return;
   }
 
-  const vote = /^mv:(\d{4}-\d{2}-\d{2}):(\d+):(\d+)$/.exec(data);
+  const vote = /^mv:((?:test:)?\d{4}-\d{2}-\d{2}):(\d+):(\d+)$/.exec(data);
   if (vote) {
     await handleVotePick(ctx, settings, cq, vote[1]!, Number(vote[2]), Number(vote[3]), answer);
     return;
@@ -1416,12 +1456,24 @@ export function parseVoteResetText(text: string): boolean {
 }
 
 /**
+ * Resolves the active Mättö day for today: prefers an open real contest (`today`),
+ * falling back to an open `/testimatto` contest (`test:${today}`) if one is running.
+ */
+async function resolveOpenMattoDay(db: D1Database, baseDay: string): Promise<{ day: string; row: MattoDay | null }> {
+  const realRow = await getMattoDay(db, baseDay);
+  if (realRow && !realRow.closed_at) return { day: baseDay, row: realRow };
+  const testDay = testMattoDayKey(baseDay);
+  const testRow = await getMattoDay(db, testDay);
+  if (testRow && !testRow.closed_at) return { day: testDay, row: testRow };
+  return { day: baseDay, row: realRow };
+}
+
+/**
  * Private-chat text for draft/vote when inline buttons aren't available (e.g. some Telegram clients).
  * Returns true if the message was handled as a Mättö action.
  */
 export async function handleMattoText(ctx: Ctx, msg: Message, user: User, text: string, settings: Settings): Promise<boolean> {
-  const day = today(ctx);
-  const row = await getMattoDay(ctx.db, day);
+  const { day, row } = await resolveOpenMattoDay(ctx.db, today(ctx));
   if (!row || row.closed_at) return false;
 
   if (!row.vote_opened_at) {
@@ -1542,22 +1594,24 @@ export async function mattoResetCommand(ctx: Ctx, msg: Message, settings: Settin
   }
   if (msg.chat.id !== settings.groupChatId) return;
 
-  const day = today(ctx);
-  const row = await getMattoDay(ctx.db, day);
+  const baseDay = today(ctx);
+  const { day, row } = await resolveOpenMattoDay(ctx.db, baseDay);
+  const shownDay = displayDay(day);
   if (!row) {
-    await reply(ctx, msg, `⚔️ Ei nollattavaa: Daily Mättöä ei ole käynnissä ${day}.`);
+    await reply(ctx, msg, `⚔️ Ei nollattavaa: Daily Mättöä ei ole käynnissä ${shownDay}.`);
     return;
   }
 
   const raw = (msg.text ?? msg.caption ?? "").trim();
-  const fullWipe = /\bkaikki\b/i.test(raw);
+  const fullWipe = /\bkaikki\b/i.test(raw) || isTestMattoDay(day);
 
   if (fullWipe || !row.vote_opened_at) {
     await wipeMattoDay(ctx.db, day);
+    const restartCmd = isTestMattoDay(day) ? "/testimatto" : "/matto";
     await reply(
       ctx,
       msg,
-      `⚔️ Daily Mättö (${day}) nollattu kokonaan (draft + äänestys). Käynnistä uudelleen: <code>/matto</code>.`,
+      `⚔️ Daily Mättö (${shownDay}) nollattu kokonaan (draft + äänestys). Käynnistä uudelleen: <code>${restartCmd}</code>.`,
     );
     return;
   }
@@ -1568,7 +1622,7 @@ export async function mattoResetCommand(ctx: Ctx, msg: Message, settings: Settin
     await reply(
       ctx,
       msg,
-      `⚔️ Äänestys nollattu (${day}), mutta valmiita joukkueita on vain ${finished.length}. Tarvitaan 3+ — nollaa koko peli (<code>/mattonollaa kaikki</code>) tai odota draftia.`,
+      `⚔️ Äänestys nollattu (${shownDay}), mutta valmiita joukkueita on vain ${finished.length}. Tarvitaan 3+ — nollaa koko peli (<code>/mattonollaa kaikki</code>) tai odota draftia.`,
     );
     return;
   }
@@ -1577,57 +1631,63 @@ export async function mattoResetCommand(ctx: Ctx, msg: Message, settings: Settin
   await reply(
     ctx,
     msg,
-    `⚔️ Äänestys nollattu ja avattu uudelleen (${day}). Draftit säilyivät; teema näkyy äänestyslipussa. Pyydä uusi lippu: <code>/matto</code> tai <code>/mattoaanesta</code>.`,
+    `⚔️ Äänestys nollattu ja avattu uudelleen (${shownDay}). Draftit säilyivät; teema näkyy äänestyslipussa. Pyydä uusi lippu: <code>/matto</code> tai <code>/mattoaanesta</code>.`,
   );
+}
+
+async function resendPrivateMattoCardOrBallot(ctx: Ctx, msg: Message, user: User, settings: Settings, day: string): Promise<void> {
+  if (settings.groupChatId === null || !(await isGroupMember(ctx, settings.groupChatId, user.id))) {
+    await reply(ctx, msg, "Vain ryhmän jäsenet voivat pelata Daily Mättöä.");
+    return;
+  }
+  const row = await getMattoDay(ctx.db, day);
+  if (!row || row.closed_at) {
+    const startCmd = isTestMattoDay(day) ? "/testimatto" : "/matto";
+    await reply(ctx, msg, `Daily Mättö ei ole käynnissä. Käynnistä se ryhmässä komennolla ${startCmd}.`);
+    return;
+  }
+  if (!row.vote_opened_at) {
+    // Always send a new card: editing the old one can leave a buttonless message stuck.
+    await ctx.db
+      .prepare("UPDATE matto_teams SET draft_message_id = NULL WHERE day = ? AND player_id = ?")
+      .bind(day, user.id)
+      .run();
+    const ok = await sendDraftCard(ctx, day, user.id);
+    await reply(
+      ctx,
+      msg,
+      ok
+        ? "Lähetin draft-viestin. Jos et näe nappeja, vastaa <code>pidä</code> tai <code>ohita</code>."
+        : "En saanut lähetettyä draftia. Paina Start ja yritä uudelleen.",
+    );
+    return;
+  }
+  await ctx.db
+    .prepare("INSERT INTO matto_ballots (day, voter_id, ballot_message_id, cursor, updated_at) VALUES (?, ?, NULL, 0, NULL) ON CONFLICT DO NOTHING")
+    .bind(day, user.id)
+    .run();
+  // Fresh ballot message
+  await ctx.db
+    .prepare("UPDATE matto_ballots SET ballot_message_id = NULL WHERE day = ? AND voter_id = ?")
+    .bind(day, user.id)
+    .run();
+  const ok = await sendMattoBallot(ctx, settings, day, user.id);
+  if (ok) await refreshGroupStatus(ctx, settings, day);
+  await reply(ctx, msg, ok ? "Lähetin äänestyslipun." : "En saanut lähetettyä äänestyslippua. Paina Start ja yritä uudelleen.");
 }
 
 /** /matto in the group starts (or reports) today's contest. Privately resends draft/ballot. */
 export async function mattoCommand(ctx: Ctx, msg: Message, user: User, settings: Settings): Promise<void> {
-  const day = today(ctx);
+  const baseDay = today(ctx);
 
   if (msg.chat.type === "private") {
-    if (settings.groupChatId === null || !(await isGroupMember(ctx, settings.groupChatId, user.id))) {
-      await reply(ctx, msg, "Vain ryhmän jäsenet voivat pelata Daily Mättöä.");
-      return;
-    }
-    const row = await getMattoDay(ctx.db, day);
-    if (!row || row.closed_at) {
-      await reply(ctx, msg, "Daily Mättö ei ole käynnissä. Käynnistä se ryhmässä komennolla /matto.");
-      return;
-    }
-    if (!row.vote_opened_at) {
-      // Always send a new card: editing the old one can leave a buttonless message stuck.
-      await ctx.db
-        .prepare("UPDATE matto_teams SET draft_message_id = NULL WHERE day = ? AND player_id = ?")
-        .bind(day, user.id)
-        .run();
-      const ok = await sendDraftCard(ctx, day, user.id);
-      await reply(
-        ctx,
-        msg,
-        ok
-          ? "Lähetin draft-viestin. Jos et näe nappeja, vastaa <code>pidä</code> tai <code>ohita</code>."
-          : "En saanut lähetettyä draftia. Paina Start ja yritä uudelleen.",
-      );
-      return;
-    }
-    await ctx.db
-      .prepare("INSERT INTO matto_ballots (day, voter_id, ballot_message_id, cursor, updated_at) VALUES (?, ?, NULL, 0, NULL) ON CONFLICT DO NOTHING")
-      .bind(day, user.id)
-      .run();
-    // Fresh ballot message
-    await ctx.db
-      .prepare("UPDATE matto_ballots SET ballot_message_id = NULL WHERE day = ? AND voter_id = ?")
-      .bind(day, user.id)
-      .run();
-    const ok = await sendMattoBallot(ctx, settings, day, user.id);
-    if (ok) await refreshGroupStatus(ctx, settings, day);
-    await reply(ctx, msg, ok ? "Lähetin äänestyslipun." : "En saanut lähetettyä äänestyslippua. Paina Start ja yritä uudelleen.");
+    const { day } = await resolveOpenMattoDay(ctx.db, baseDay);
+    await resendPrivateMattoCardOrBallot(ctx, msg, user, settings, day);
     return;
   }
 
   if (msg.chat.id !== settings.groupChatId) return;
-  const row = await getMattoDay(ctx.db, day);
+  const row = await getMattoDay(ctx.db, baseDay);
   if (row && !row.closed_at) {
     await challengeMattoCommand(ctx, msg);
     return;
@@ -1637,7 +1697,26 @@ export async function mattoCommand(ctx: Ctx, msg: Message, user: User, settings:
     return;
   }
 
-  const err = await startMatto(ctx, settings, day, user.id);
+  const err = await startMatto(ctx, settings, baseDay, user.id);
+  if (err) await reply(ctx, msg, err);
+}
+
+/**
+ * /testimatto in the group starts an ephemeral test Mättö contest that does not save placements
+ * or character D&D stat changes to the database, and wipes its own temporary state when finished.
+ * Privately resends the test contest's draft card or ballot.
+ */
+export async function testMattoCommand(ctx: Ctx, msg: Message, user: User, settings: Settings): Promise<void> {
+  const testDay = testMattoDayKey(today(ctx));
+
+  if (msg.chat.type === "private") {
+    await resendPrivateMattoCardOrBallot(ctx, msg, user, settings, testDay);
+    return;
+  }
+
+  if (msg.chat.id !== settings.groupChatId) return;
+  await wipeMattoDay(ctx.db, testDay);
+  const err = await startMatto(ctx, settings, testDay, user.id);
   if (err) await reply(ctx, msg, err);
 }
 
@@ -1648,8 +1727,7 @@ export async function mattoBallotCommand(ctx: Ctx, msg: Message, user: User, set
     await reply(ctx, msg, `Äänestys käydään yksityisesti: avaa ${bot} ja lähetä /mattoaanesta.`);
     return;
   }
-  const day = today(ctx);
-  const row = await getMattoDay(ctx.db, day);
+  const { day, row } = await resolveOpenMattoDay(ctx.db, today(ctx));
   if (!row?.vote_opened_at || row.closed_at) {
     await reply(ctx, msg, "Mättö-äänestys ei ole nyt käynnissä.");
     return;
@@ -1666,15 +1744,15 @@ export async function mattoBallotCommand(ctx: Ctx, msg: Message, user: User, set
 
 /** /mattotilanne shows draft/vote progress or final results. */
 export async function challengeMattoCommand(ctx: Ctx, msg: Message): Promise<void> {
-  const day = today(ctx);
-  const row = await getMattoDay(ctx.db, day);
+  const baseDay = today(ctx);
+  const { day, row } = await resolveOpenMattoDay(ctx.db, baseDay);
   if (!row) {
-    const monday = weekMonday(day);
+    const monday = weekMonday(baseDay);
     const saved = await ctx.db
       .prepare("SELECT value FROM settings WHERE key = ?")
       .bind(`matto_week:${monday}`)
       .first<{ value: string }>();
-    if (saved?.value && saved.value < day) {
+    if (saved?.value && saved.value < baseDay) {
       await reply(ctx, msg, `⚔️ Tämän viikon Daily Mättö pelattiin ${saved.value}. Seuraava arvotaan ensi viikolla, tai käynnistä /matto uutena päivänä.`);
       return;
     }

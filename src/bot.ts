@@ -62,6 +62,7 @@ import {
   mattoCommand,
   mattoResetCommand,
   mattoTick,
+  testMattoCommand,
 } from "./matto";
 import { GAMES, dayForResult, gameById, matchGameArg, parseResults, parseRoundData, type GameId, type ParsedResult } from "./games";
 import {
@@ -675,6 +676,10 @@ async function privateCommand(ctx: Ctx, msg: Message, user: User, name: string, 
     case "maetto":
       await mattoCommand(ctx, msg, user, settings);
       return;
+    case "testimatto":
+    case "testimaetto":
+      await testMattoCommand(ctx, msg, user, settings);
+      return;
     case "mattoaanesta":
       await mattoBallotCommand(ctx, msg, user, settings);
       return;
@@ -783,6 +788,10 @@ async function groupCommand(ctx: Ctx, msg: Message, name: string, settings: Sett
     case "matto":
     case "maetto":
       if (msg.from && !msg.sender_chat) await mattoCommand(ctx, msg, msg.from, settings);
+      return;
+    case "testimatto":
+    case "testimaetto":
+      if (msg.from && !msg.sender_chat) await testMattoCommand(ctx, msg, msg.from, settings);
       return;
     case "mattoaanesta":
       if (msg.from && !msg.sender_chat) await mattoBallotCommand(ctx, msg, msg.from, settings);
