@@ -14,8 +14,9 @@ export const DRAFT_TIME = "09:00";
 export const DRAFT_DEADLINE = "21:00";
 export const OFFER_COUNT = 10;
 export const KEEP_COUNT = 5;
-export const STRONG_PER_DEAL = 5;
-export const WEAK_PER_DEAL = 5;
+export const STRONG_PER_DEAL = 4;
+export const WEAK_PER_DEAL = 3;
+export const WISE_PER_DEAL = 3;
 
 const TEAM_LABELS = ["Alfa", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel"];
 
@@ -40,14 +41,30 @@ export function canSkip(kept: number, remainingIncludingCurrent: number, target 
   return remainingIncludingCurrent - 1 >= target - kept;
 }
 
-/** Build a 10-card deal: 5 strong + 5 weak, then shuffle. */
-export function buildDeal<S, W>(strong: readonly S[], weak: readonly W[], rand: () => number = Math.random): (S | W)[] {
-  if (strong.length < STRONG_PER_DEAL || weak.length < WEAK_PER_DEAL) {
+/** Build a 10-card deal: 4 strong + 3 weak + 3 wise (or 5 strong + 5 weak when wise omitted), then shuffle. */
+export function buildDeal<S, W, Z = never>(
+  strong: readonly S[],
+  weak: readonly W[],
+  wiseOrRand?: readonly Z[] | (() => number),
+  rand: () => number = Math.random,
+): (S | W | Z)[] {
+  if (typeof wiseOrRand === "function" || wiseOrRand === undefined) {
+    const r = typeof wiseOrRand === "function" ? wiseOrRand : rand;
+    if (strong.length < 5 || weak.length < 5) {
+      throw new Error("Not enough characters to deal");
+    }
+    const pickStrong = shuffled(strong, r).slice(0, 5);
+    const pickWeak = shuffled(weak, r).slice(0, 5);
+    return shuffled([...pickStrong, ...pickWeak], r);
+  }
+  const wise = wiseOrRand;
+  if (strong.length < STRONG_PER_DEAL || weak.length < WEAK_PER_DEAL || wise.length < WISE_PER_DEAL) {
     throw new Error("Not enough characters to deal");
   }
   const pickStrong = shuffled(strong, rand).slice(0, STRONG_PER_DEAL);
   const pickWeak = shuffled(weak, rand).slice(0, WEAK_PER_DEAL);
-  return shuffled([...pickStrong, ...pickWeak], rand);
+  const pickWise = shuffled(wise, rand).slice(0, WISE_PER_DEAL);
+  return shuffled([...pickStrong, ...pickWeak, ...pickWise], rand);
 }
 
 /** Every unordered pair as matchups, in shuffled order. */
@@ -132,10 +149,12 @@ export interface MattoDay {
   closed_at: string | null;
 }
 
+export type CharacterStrength = "strong" | "weak" | "wise";
+
 interface CharacterRow {
   id: number;
   name: string;
-  strength: "strong" | "weak";
+  strength: CharacterStrength;
 }
 
 interface OfferRow {
@@ -144,7 +163,7 @@ interface OfferRow {
   position: number;
   character_id: number;
   name: string;
-  strength: "strong" | "weak";
+  strength: CharacterStrength;
   decision: "keep" | "skip" | "forced" | null;
   decided_at: string | null;
 }
@@ -188,7 +207,7 @@ async function openMattoDays(db: D1Database): Promise<MattoDay[]> {
   return results;
 }
 
-async function charactersByStrength(db: D1Database, strength: "strong" | "weak"): Promise<CharacterRow[]> {
+async function charactersByStrength(db: D1Database, strength: CharacterStrength): Promise<CharacterRow[]> {
   const { results } = await db
     .prepare("SELECT id, name, strength FROM matto_characters WHERE strength = ?")
     .bind(strength)
@@ -377,7 +396,7 @@ function renderAnnouncement(botUsername: string | null, startedByName: string | 
     `⚔️ <b>Daily Mättö alkaa!</b>`,
     "",
     `${who} mättö-pelin. Jokainen saa yksityisviestinä 10 hahmoa yksi kerrallaan — pidä tai ohita, kunnes joukkueessa on ${KEEP_COUNT}.`,
-    `Puolet tarjouksista on vahvoja, puolet heikkoja (järjestys sekoitettu).`,
+    `Tarjouksissa on vahvoja, viisaita ja heikkoja hahmoja (järjestys sekoitettu).`,
     "",
     `Draft ja äänestys toimivat myös ilman nappeja: vastaa botille <code>pidä</code>/<code>ohita</code>, äänestyksessä joukkueen nimellä (esim. <code>Alfa</code>).`,
     `Draft päättyy klo ${DRAFT_DEADLINE} (tai heti kun kaikki ovat valmiita). Äänestyksessä teema paljastuu; et äänestä oman joukkueesi otteluita.`,
@@ -529,8 +548,15 @@ async function ensurePlayerRows(ctx: Ctx, players: { id: number; first_name: str
   }
 }
 
-async function dealForPlayer(db: D1Database, day: string, playerId: number, strong: CharacterRow[], weak: CharacterRow[]): Promise<void> {
-  const deal = buildDeal(strong, weak);
+async function dealForPlayer(
+  db: D1Database,
+  day: string,
+  playerId: number,
+  strong: CharacterRow[],
+  weak: CharacterRow[],
+  wise: CharacterRow[],
+): Promise<void> {
+  const deal = wise.length >= WISE_PER_DEAL ? buildDeal(strong, weak, wise) : buildDeal(strong, weak);
   const stmts = deal.map((c, position) =>
     db
       .prepare(
@@ -559,7 +585,11 @@ export async function startMatto(ctx: Ctx, settings: Settings, day: string, star
   const themeId = await pickThemeId(ctx.db);
   if (themeId === null) return "Teemalista on tyhjä — lisää teemoja kantaan.";
 
-  const [strong, weak] = await Promise.all([charactersByStrength(ctx.db, "strong"), charactersByStrength(ctx.db, "weak")]);
+  const [strong, weak, wise] = await Promise.all([
+    charactersByStrength(ctx.db, "strong"),
+    charactersByStrength(ctx.db, "weak"),
+    charactersByStrength(ctx.db, "wise"),
+  ]);
   if (strong.length < STRONG_PER_DEAL || weak.length < WEAK_PER_DEAL) {
     return "Hahmolista on liian lyhyt draftia varten.";
   }
@@ -575,7 +605,7 @@ export async function startMatto(ctx: Ctx, settings: Settings, day: string, star
   await claimWeek(ctx.db, day);
 
   for (const p of players) {
-    await dealForPlayer(ctx.db, day, p.id, strong, weak);
+    await dealForPlayer(ctx.db, day, p.id, strong, weak, wise);
   }
 
   const names = displayNames(players);
