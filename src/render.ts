@@ -602,6 +602,7 @@ export function renderCommands(): string {
     "• <code>/mattotilanne</code> – Draftin tai äänestyksen tilanne (tai tulokset)",
     "• <code>/mattoaanesta</code> – Pyydä uusi mättö-äänestyslippu yksityisesti",
     "• <code>/mattonollaa</code> – Nollaa äänestys (draftit säilyvät) tai <code>/mattonollaa kaikki</code> koko päivän peli",
+    "• <code>/statsit [nimi]</code> – Näytä hahmon D&D-statsit",
     "• Draft ilman nappeja: vastaa botille <code>pidä</code> / <code>ohita</code> (tai <code>p</code> / <code>o</code>)",
     "• Äänestys ilman nappeja: vastaa joukkueen nimellä (esim. <code>Alfa</code>) tai <code>a</code>/<code>b</code>; <code>alusta</code> aloittaa uudelleen",
     "",

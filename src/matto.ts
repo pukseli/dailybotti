@@ -445,15 +445,10 @@ function renderDraftCard(opts: {
     `⚔️ <b>Daily Mättö${testTag}</b> · draft ${displayDay(opts.day)}`,
     "",
     `Hahmo ${opts.position + 1}/${OFFER_COUNT}: <b>${escapeHtml(opts.characterName)}</b>`,
-    `📊 <code>${formatStats(opts.characterStats)}</code>`,
     `Valittu ${opts.kept}/${KEEP_COUNT} · tarjouksia jäljellä ${opts.remaining}`,
   ];
   if (opts.keptOffers.length) {
-    lines.push(
-      "",
-      `Joukkueesi: ${opts.keptOffers.map((c) => escapeHtml(c.name)).join(" · ")}`,
-      ...opts.keptOffers.map((c) => `• ${escapeHtml(c.name)}: <code>${formatStats(c)}</code>`),
-    );
+    lines.push("", `Joukkueesi: ${opts.keptOffers.map((c) => escapeHtml(c.name)).join(" · ")}`);
   }
   if (opts.forced) {
     lines.push("", "Pakko ottaa — valittavia paikkoja on jäljellä yhtä monta kuin hahmoja.");
@@ -481,7 +476,7 @@ function renderDraftDone(day: string, chars: OfferRow[]): string {
     `⚔️ <b>Daily Mättö${testTag}</b> · draft valmis · ${displayDay(day)}`,
     "",
     `Joukkueesi (${KEEP_COUNT}):`,
-    ...chars.map((c) => `• <b>${escapeHtml(c.name)}</b> — <code>${formatStats(c)}</code>`),
+    ...chars.map((c) => `• <b>${escapeHtml(c.name)}</b>`),
     "",
     "Äänestys alkaa, kun kaikki ovat valinneet (tai draftin deadline menee umpeen). Teema paljastuu äänestyksessä; et äänestä oman joukkueesi otteluita.",
   ].join("\n");
@@ -519,7 +514,6 @@ function renderBallot(opts: {
   const lines = [
     `⚔️ <b>Daily Mättö${testTag}</b> · äänestys · ${displayDay(opts.day)}`,
     `<b>Teema:</b> ${escapeHtml(opts.theme)}`,
-    `🎲 <b>Panos:</b> ${formatThemeStakes(opts.winStat, opts.loseStat)}`,
     "<i>Joukkueiden omistajat paljastetaan tuloksissa. Et äänestä otteluita, joissa oma joukkueesi on mukana.</i>",
     "",
     "<b>Joukkueet</b>",
@@ -527,9 +521,6 @@ function renderBallot(opts: {
   for (const [playerId, label] of [...opts.labels.entries()].sort((a, b) => a[1].localeCompare(b[1], "fi"))) {
     const chars = opts.roster.get(playerId) ?? [];
     lines.push(`• <b>${escapeHtml(label)}</b>: ${chars.map((c) => escapeHtml(c.name)).join(", ")}`);
-    for (const c of chars) {
-      lines.push(`  ◦ ${escapeHtml(c.name)}: <code>${formatStats(c)}</code>`);
-    }
   }
 
   if (opts.matchups.length === 0) {
@@ -598,13 +589,11 @@ function renderVoteStatus(opts: {
   }
 
   const done = opts.voters.filter((v) => v.done);
-  const stakes = opts.winStat && opts.loseStat ? `🎲 <b>Panos:</b> ${formatThemeStakes(opts.winStat, opts.loseStat)}` : "";
   const lines = opts.closed
     ? [`⚔️ <b>Daily Mättö${testTag}</b> · äänestys päättyi · ${shownDay}`]
     : [
         `⚔️ <b>Daily Mättö${testTag}</b> · äänestys käynnissä · ${shownDay}`,
         opts.theme ? `<b>Teema:</b> ${escapeHtml(opts.theme)}` : "",
-        stakes,
         `Joukkueet anonyymejä; et äänestä oman joukkueesi otteluita. Äänestys päättyy, kun kaikki ovat äänestäneet, viimeistään ${closesLabel(opts.closeTime)}.`,
       ].filter(Boolean);
   lines.push("", `Äänestäneet (${done.length}/${opts.voters.length}): ${done.length ? done.map((v) => nameOf(opts.names, v.id)).join(", ") : "–"}`);
@@ -658,9 +647,6 @@ function renderResults(opts: {
           ? ` <b>(-1 ${opts.loseStat.toUpperCase()})</b>`
           : "";
     lines.push(`• ${nameOf(opts.names, s.playerId)}${deltaTag}: ${chars.map((c) => escapeHtml(c.name)).join(", ")}`);
-    for (const c of chars) {
-      lines.push(`  ◦ ${escapeHtml(c.name)}: <code>${formatStats(c)}</code>`);
-    }
   }
   return fit(lines);
 }
@@ -1826,4 +1812,55 @@ export async function challengeMattoCommand(ctx: Ctx, msg: Message): Promise<voi
       drafted: players.map((p) => ({ id: p.id, done: Boolean(teams.find((t) => t.player_id === p.id)?.completed_at) })),
     }),
   );
+}
+
+/** /statsit [nimi] shows a character's D&D stats. */
+export async function statsitCommand(ctx: Ctx, msg: Message, rawText: string): Promise<void> {
+  const query = rawText
+    .replace(/^[/!][a-zA-Z0-9_-]+(@[a-zA-Z0-9_]+)?\s*/i, "")
+    .replace(/^\[+|\]+$/g, "")
+    .trim();
+
+  if (!query) {
+    await reply(ctx, msg, "Käyttö: <code>/statsit [nimi]</code> (esim. <code>/statsit Väinämöinen</code>)");
+    return;
+  }
+
+  const { results } = await ctx.db
+    .prepare("SELECT id, name, strength, str, dex, con, int, wis, cha FROM matto_characters ORDER BY name")
+    .all<CharacterRow>();
+
+  const norm = (s: string) =>
+    s
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/\p{M}/gu, "");
+
+  const qLower = query.toLowerCase();
+  const qNorm = norm(query);
+
+  const exact = results.filter((c) => c.name.toLowerCase() === qLower || norm(c.name) === qNorm);
+  const matches =
+    exact.length > 0
+      ? exact
+      : results.filter((c) => c.name.toLowerCase().includes(qLower) || norm(c.name).includes(qNorm));
+
+  if (matches.length === 0) {
+    await reply(ctx, msg, `Hahmoa "${escapeHtml(query)}" ei löytynyt.`);
+    return;
+  }
+
+  if (matches.length === 1) {
+    const c = matches[0]!;
+    await reply(ctx, msg, `🎲 <b>${escapeHtml(c.name)}</b>\n📊 <code>${formatStats(c)}</code>`);
+    return;
+  }
+
+  const limit = 8;
+  const shown = matches.slice(0, limit);
+  const lines = shown.map((c) => `• <b>${escapeHtml(c.name)}</b>: <code>${formatStats(c)}</code>`);
+  if (matches.length > limit) {
+    lines.push("", `<i>…ja ${matches.length - limit} muuta osumaa (tarkenna hakua).</i>`);
+  }
+  await reply(ctx, msg, fit(lines));
 }

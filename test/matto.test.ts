@@ -189,7 +189,7 @@ describe("matto flow", () => {
     const draft = tg.sentTo(anna.id).filter((c) => c.params.reply_markup).at(-1);
     expect(draft?.params.text).toContain("Daily Mättö");
     expect(draft?.params.text).toContain("Hahmo 1/8");
-    expect(draft?.params.text).toMatch(/STR \d+ · DEX \d+ · CON \d+ · INT \d+ · WIS \d+ · CHA \d+/);
+    expect(draft?.params.text).not.toContain("STR ");
 
     const day = await env.DB.prepare("SELECT day, closed_at FROM matto_days WHERE day = ?").bind(DAY).first();
     expect(day).toEqual({ day: DAY, closed_at: null });
@@ -258,6 +258,8 @@ describe("matto flow", () => {
     const ballot = tg.sentTo(ben.id).find((c) => String(c.params.text).includes("äänestys"));
     expect(ballot?.params.text).toContain("<b>Teema:</b>");
     expect(ballot?.params.text).not.toContain("Teema on salainen");
+    expect(ballot?.params.text).not.toContain("STR ");
+    expect(ballot?.params.text).not.toContain("Panos:");
     expect(ballot?.params.text).not.toContain(anna.first_name);
     expect(ballot?.params.text).toMatch(/Vastaa <code>.+<\/code> tai <code>.+<\/code>/);
     // 4 players → each judges 3 matchups (not their own)
@@ -475,5 +477,16 @@ describe("matto flow", () => {
 
     const ballotsLeft = await env.DB.prepare("SELECT COUNT(*) AS n FROM matto_ballots").first<{ n: number }>();
     expect(ballotsLeft?.n).toBe(0);
+  });
+
+  it("shows character D&D stats with /statsit", async () => {
+    await register();
+    const char = await env.DB.prepare("SELECT name FROM matto_characters LIMIT 1").first<{ name: string }>();
+    expect(char?.name).toBeTruthy();
+
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, `/statsit [[${char!.name}]]`));
+    const msg = tg.sentTo(GROUP).at(-1)?.params.text as string;
+    expect(msg).toContain(char!.name);
+    expect(msg).toMatch(/STR \d+ · DEX \d+ · CON \d+ · INT \d+ · WIS \d+ · CHA \d+/);
   });
 });
