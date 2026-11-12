@@ -68,6 +68,32 @@ async function init(request: Request, env: Env): Promise<Response> {
 
     await syncCommandMenus(env.DB, tg, null, true);
     report.push("✅ Command menu set");
+
+    const notified = await env.DB.prepare("SELECT value FROM settings WHERE key = 'notify_dnd_stats_v1'").first<{ value: string }>();
+    if (!notified) {
+      const pukseli = await env.DB
+        .prepare(
+          "SELECT id, first_name, last_name, username FROM players WHERE lower(username) = 'pukseli' OR (lower(first_name) = 'akseli' AND lower(last_name) = 'arvaja') OR lower(first_name) LIKE 'akseli%' ORDER BY CASE WHEN lower(username) = 'pukseli' THEN 0 ELSE 1 END LIMIT 1",
+        )
+        .first<{ id: number; first_name: string; last_name: string | null; username: string | null }>();
+      const charCount = await env.DB.prepare("SELECT COUNT(*) AS n FROM matto_characters WHERE str IS NOT NULL").first<{ n: number }>();
+      const themeCount = await env.DB.prepare("SELECT COUNT(*) AS n FROM matto_themes WHERE win_stat IS NOT NULL").first<{ n: number }>();
+      if (pukseli && (charCount?.n ?? 0) > 0 && (themeCount?.n ?? 0) > 0) {
+        await tg.call("sendMessage", {
+          chat_id: pukseli.id,
+          text: [
+            "✅ <b>Daily Mättö D&D-päivitys on nyt valmis ja tuotantokannassa!</b>",
+            "",
+            `• Draft-formaatti: 3 hahmoa 8 tarjouksesta (2 strong, 2 weak, 2 wise + 2 satunnaista, sekoitettu järjestys)`,
+            `• Hahmojen D&D-statsit (STR, DEX, CON, INT, WIS, CHA 1–20) kannassa: ${charCount?.n} hahmoa`,
+            `• Tehtävien +/- statsivaikutukset (+1 voittajille, -1 jumbosijalle, 2–3 ei muutosta) kannassa: ${themeCount?.n} tehtävää`,
+          ].join("\n"),
+          parse_mode: "HTML",
+        });
+        await setSetting(env.DB, "notify_dnd_stats_v1", new Date().toISOString());
+        report.push(`✅ Sent readiness DM to ${pukseli.first_name} (@${pukseli.username ?? pukseli.id})`);
+      }
+    }
   } catch (err) {
     return fail(err instanceof Error ? err.message : String(err));
   }
