@@ -1,0 +1,71 @@
+-- Add Finnish culture-inspired wisdom and intelligence themes to Daily Mättö.
+
+INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
+  ('Äidinkielen ylioppilaskoe · 6 tuntia liikuntasalissa eväiden kanssa', 'äidinkielen ylioppilaskoe · 6 tuntia liikuntasalissa eväiden kanssa', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Pitkän matematiikan ylioppilaskoe ilman laskinta ja taulukkokirjaa', 'pitkän matematiikan ylioppilaskoe ilman laskinta ja taulukkokirjaa', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Ryhmätyön kanto, kun muut laiskottelevat ja palautus on klo 23:59', 'ryhmätyön kanto, kun muut laiskottelevat ja palautus on klo 23:59', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Ala-asteen discon hitaiden haku, kun viimeinen hidas alkaa soida', 'ala-asteen discon hitaiden haku, kun viimeinen hidas alkaa soida', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Gradun tai opinnäytetyön kirjoittaminen valmiiksi viimeisenä yönä ennen deadlinea', 'gradun tai opinnäytetyön kirjoittaminen valmiiksi viimeisenä yönä ennen deadlinea', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Ruotsin kielen suullinen koe, kun sanavarasto rajoittuu lauseeseen "jag heter Peter"', 'ruotsin kielen suullinen koe, kun sanavarasto rajoittuu lauseeseen "jag heter peter"', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Lääkiksen pääsykoe viiden viikon pänttäämisen jälkeen', 'lääkiksen pääsykoe viiden viikon pänttäämisen jälkeen', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Yläasteen historian koekysymykseen vastaaminen täydellä bluffilla lukematta sivuakaan', 'yläasteen historian koekysymykseen vastaaminen täydellä bluffilla lukematta sivuakaan', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Valintakokeen logiikka- ja päättelytehtävien ratkaisu aamukahdeksalta', 'valintakokeen logiikka- ja päättelytehtävien ratkaisu aamukahdeksalta', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Korkeakoulun Exam-tenttiakvaariossa selviäminen, kun kone jumittaa kesken esseen', 'korkeakoulun exam-tenttiakvaariossa selviäminen, kun kone jumittaa kesken esseen', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Koulun kevätjuhlan puheen pitäminen koko salille ilman paperia', 'koulun kevätjuhlan puheen pitäminen koko salille ilman paperia', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Vanhempainillassa opettajan haastaminen ja luokkaretken rahoituksen ratkaiseminen', 'vanhempainillassa opettajan haastaminen ja luokkaretken rahoituksen ratkaiseminen', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Sukujuhlien istumajärjestyksen laatiminen niin, ettei yksikään sukulainen riitaannu', 'sukujuhlien istumajärjestyksen laatiminen niin, ettei yksikään sukulainen riitaannu', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Joulupöydän poliittisen väittelyn rauhoittaminen ennen kuin laatikot jäähtyvät', 'joulupöydän poliittisen väittelyn rauhoittaminen ennen kuin laatikot jäähtyvät', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Taloyhtiön yhtiökokouksen puheenjohtajana toimiminen, kun aiheena on putkiremontti', 'taloyhtiön yhtiökokouksen puheenjohtajana toimiminen, kun aiheena on putkiremontti', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Mökillä sukulaisvierailun kestäminen kolme päivää sateella ilman hermoromahdusta', 'mökillä sukulaisvierailun kestäminen kolme päivää sateella ilman hermoromahdusta', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Naapurin välttely rappukäytävässä: täydellinen ajoitus ovisilmästä niin, ettei tarvitse jutella', 'naapurin välttely rappukäytävässä: täydellinen ajoitus ovisilmästä niin, ettei tarvitse jutella', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Yösaunassa syvällisten elämänohjeiden antaminen kaverille, jolla on sydänsuruja', 'yösaunassa syvällisten elämänohjeiden antaminen kaverille, jolla on sydänsuruja', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Kiusallisen hiljaisuuden kantaminen suomalaisessa hississä ilmekään värähtämättä', 'kiusallisen hiljaisuuden kantaminen suomalaisessa hississä ilmekään värähtämättä', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Teini-ikäisen lepyttely ja elämänviisauden jakaminen kotiintuloajan jälkeen', 'teini-ikäisen lepyttely ja elämänviisauden jakaminen kotiintuloajan jälkeen', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(text_key) DO NOTHING;
+
+INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
+  ('Rippijuhlien kahvipöydässä pappien ja isovanhempien kanssa keskustelu', 'rippijuhlien kahvipöydässä pappien ja isovanhempien kanssa keskustelu', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Parisuhteen riidan sovittelu IKEA-reissun puolivälissä ennen kassalle pääsyä', 'parisuhteen riidan sovittelu ikea-reissun puolivälissä ennen kassalle pääsyä', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Kaveriporukan mökkireissun ruoka- ja juomalaskun jakaminen MobilePaylla ilman draamaa', 'kaveriporukan mökkireissun ruoka- ja juomalaskun jakaminen mobilepaylla ilman draamaa', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Ensitreffien keskustelun pelastaminen, kun toinen vastaa vain yhdellä sanalla', 'ensitreffien keskustelun pelastaminen, kun toinen vastaa vain yhdellä sanalla', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Häiden bestmanin tai kaason puheen pitäminen kylmiltään ilman muistiinpanoja', 'häiden bestmanin tai kaason puheen pitäminen kylmiltään ilman muistiinpanoja', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Kiukkuisen asiakkaan lepyttely asiakaspalvelutiskillä menettämättä hermoja', 'kiukkuisen asiakkaan lepyttely asiakaspalvelutiskillä menettämättä hermoja', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Pikkujoulujen jälkeisen morkkiksen purkaminen ja työyhteisön maineen pelastaminen maanantaiaamuna', 'pikkujoulujen jälkeisen morkkiksen purkaminen ja työyhteisön maineen pelastaminen maanantaiaamuna', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Kelan asumistukihakemuksen ja liitteiden täyttäminen kerralla oikein ilman lisäselvityspyyntöä', 'kelan asumistukihakemuksen ja liitteiden täyttäminen kerralla oikein ilman lisäselvityspyyntöä', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Verottajan matkakulujen ja vähennysten maksimointi veroilmoitukseen täysin laillisesti', 'verottajan matkakulujen ja vähennysten maksimointi veroilmoitukseen täysin laillisesti', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Tori.fi-kauppojen tinkiminen: "20 € ja haen heti" -ostajan taltuttaminen voitolla', 'tori.fi-kauppojen tinkiminen: "20 € ja haen heti" -ostajan taltuttaminen voitolla', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Käytetyn auton ostaminen: piilovikojen haistaminen koeajolla ja hinnan tinkaaminen puoleen', 'käytetyn auton ostaminen: piilovikojen haistaminen koeajolla ja hinnan tinkaaminen puoleen', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Pörssisähkön hinnan optimointi: saunan, pyykkien ja lämmityksen ajoitus sentin tarkkuudella', 'pörssisähkön hinnan optimointi: saunan, pyykkien ja lämmityksen ajoitus sentin tarkkuudella', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Lääkäriajan saaminen terveyskeskuksesta klo 08:00 takaisinsoittopalvelusta ensimmäisellä yrittämällä', 'lääkäriajan saaminen terveyskeskuksesta klo 08:00 takaisinsoittopalvelusta ensimmäisellä yrittämällä', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Vakuutusyhtiön vahinkoilmoituksen perustelu niin, että korvaus tulee täysimääräisenä', 'vakuutusyhtiön vahinkoilmoituksen perustelu niin, että korvaus tulee täysimääräisenä', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Pankin asuntolainaneuvotteluissa matalimman marginaalin puhuminen', 'pankin asuntolainaneuvotteluissa matalimman marginaalin puhuminen', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Työhaastattelun "Mikä on suurin heikkoutesi?" -kysymykseen vastaaminen vakuuttavasti', 'työhaastattelun "mikä on suurin heikkoutesi?" -kysymykseen vastaaminen vakuuttavasti', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Palkankorotuksen neuvottelu kehityskeskustelussa, kun firman budjetti on jäädytetty', 'palkankorotuksen neuvottelu kehityskeskustelussa, kun firman budjetti on jäädytetty', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('VR:n jatkoyhteyksien uudelleenreititys ja korvausten haku, kun juna jää lumipyryyn Tikkurilaan', 'vr:n jatkoyhteyksien uudelleenreititys ja korvausten haku, kun juna jää lumipyryyn tikkurilaan', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Puhelinmyyjän käännyttäminen niin, että myyjä päätyy itse ostamaan sinulta jotain', 'puhelinmyyjän käännyttäminen niin, että myyjä päätyy itse ostamaan sinulta jotain', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Taloyhtiön pyykkituvan ja lenkkisaunan vuorolistan laatiminen niin, että kaikki ovat tyytyväisiä', 'taloyhtiön pyykkituvan ja lenkkisaunan vuorolistan laatiminen niin, että kaikki ovat tyytyväisiä', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(text_key) DO NOTHING;
+
+INSERT INTO matto_themes (text, text_key, kind, added_by, added_at) VALUES
+  ('Baaripähkinä-pubivisan voittaminen kantakuppilassa perjantai-iltana', 'baaripähkinä-pubivisan voittaminen kantakuppilassa perjantai-iltana', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Haluatko miljonääriksi? -ohjelman miljoonakysymyksen ratkaisu ilman oljenkorsia', 'haluatko miljonääriksi? -ohjelman miljoonakysymyksen ratkaisu ilman oljenkorsia', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Helsingin Sanomien kuukausiliitteen krypto- ja sanaristikon ratkaisu kuulakärkikynällä', 'helsingin sanomien kuukausiliitteen krypto- ja sanaristikon ratkaisu kuulakärkikynällä', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Intin P-kauden tupakaverien motivointi ja ryhmähengen pelastaminen klo 03:00 kipinävuorossa', 'intin p-kauden tupakaverien motivointi ja ryhmähengen pelastaminen klo 03:00 kipinävuorossa', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Intin leirillä kamiinan pitäminen punaisena koko yön ilman, että teltta savuaa tai sammuu', 'intin leirillä kamiinan pitäminen punaisena koko yön ilman, että teltta savuaa tai sammuu', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Mökkinaapurin kanssa rajapyykistä ja laituripaikasta sopiminen ilman käräjäoikeutta', 'mökkinaapurin kanssa rajapyykistä ja laituripaikasta sopiminen ilman käräjäoikeutta', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Veneen peruuttaminen kapeaan mökkilaituriin kovassa sivutuulessa koko suvun katsoessa rannalta', 'veneen peruuttaminen kapeaan mökkilaituriin kovassa sivutuulessa koko suvun katsoessa rannalta', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Sienimetsässä myrkkysienten erottaminen suppilovahveroista ja eksyneen marjastajan opastaminen tielle', 'sienimetsässä myrkkysienten erottaminen suppilovahveroista ja eksyneen marjastajan opastaminen tielle', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Juhannuksen sääennusteen ja ukkosrintaman tarkka tulkinta pelkistä taivaanrannan pilvistä', 'juhannuksen sääennusteen ja ukkosrintaman tarkka tulkinta pelkistä taivaanrannan pilvistä', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Talkooporukan johtaminen niin, että puuliiteri täyttyy ennen kuin talkookaljat loppuvat', 'talkooporukan johtaminen niin, että puuliiteri täyttyy ennen kuin talkookaljat loppuvat', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Linnan juhlien kättelyjonossa ikimuistoinen ja älykäs keskustelu presidenttiparin kanssa 5 sekunnissa', 'linnan juhlien kättelyjonossa ikimuistoinen ja älykäs keskustelu presidenttiparin kanssa 5 sekunnissa', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Ylen suureen vaalitenttiin osallistuminen ja päällehuutajien hiljentäminen kylmillä faktoilla', 'ylen suureen vaalitenttiin osallistuminen ja päällehuutajien hiljentäminen kylmillä faktoilla', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Kaverin muuttokuorman pakkaaminen pakettiautoon täydellisenä 3D-Tetriksenä yhdellä reissulla', 'kaverin muuttokuorman pakkaaminen pakettiautoon täydellisenä 3d-tetriksenä yhdellä reissulla', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Mökkihuussin tyhjennysvuoron nakittaminen muille pelkällä karismalla ja puhetaidolla', 'mökkihuussin tyhjennysvuoron nakittaminen muille pelkällä karismalla ja puhetaidolla', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Kadonneen puhelimen, avainten ja lompakon jäljittäminen baari-illan jälkeen puhtaalla salapoliisityöllä', 'kadonneen puhelimen, avainten ja lompakon jäljittäminen baari-illan jälkeen puhtaalla salapoliisityöllä', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Tokmannin avajaisten ämpärijonon taktinen sijoittuminen niin, että saa ilmaisen ämpärin jonottamatta', 'tokmannin avajaisten ämpärijonon taktinen sijoittuminen niin, että saa ilmaisen ämpärin jonottamatta', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Itämeren risteilyllä hytin, tax-free-ostosten ja buffet-vuoron taktinen optimointi', 'itämeren risteilyllä hytin, tax-free-ostosten ja buffet-vuoron taktinen optimointi', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Talvipakkasella hyytyneen auton käynnistäminen ja diagnosointi parkkipaikalla ilman vikakoodinlukijaa', 'talvipakkasella hyytyneen auton käynnistäminen ja diagnosointi parkkipaikalla ilman vikakoodinlukijaa', 'serious', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Lähikaupan punalaputettujen tuotteiden (-60 %) ilta-alennuksen tarkka ajoittaminen ja hyödyntäminen', 'lähikaupan punalaputettujen tuotteiden (-60 %) ilta-alennuksen tarkka ajoittaminen ja hyödyntäminen', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ('Vanhempien älypuhelimen, digiboksin ja verkkopankkitunnusten korjaaminen puhelimitse etänä', 'vanhempien älypuhelimen, digiboksin ja verkkopankkitunnusten korjaaminen puhelimitse etänä', 'funny', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ON CONFLICT(text_key) DO NOTHING;
+
