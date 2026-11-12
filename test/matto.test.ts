@@ -74,7 +74,7 @@ function latestKeyboard(userId: number) {
 }
 
 function firstDraftMessageId(userId: number): number {
-  return tg.sentTo(userId).find((c) => String(c.params.text).includes("Hahmo 1/10"))!.result.message_id as number;
+  return tg.sentTo(userId).find((c) => String(c.params.text).includes("Hahmo 1/8"))!.result.message_id as number;
 }
 
 function firstBallotMessageId(userId: number): number {
@@ -91,7 +91,7 @@ async function keepNext(user: User, messageId: number): Promise<void> {
 
 async function draftFive(user: User): Promise<void> {
   const messageId = firstDraftMessageId(user.id);
-  for (let i = 0; i < 5; i++) await keepNext(user, messageId);
+  for (let i = 0; i < 3; i++) await keepNext(user, messageId);
 }
 
 describe("matto pure helpers", () => {
@@ -104,24 +104,25 @@ describe("matto pure helpers", () => {
   });
 
   it("forces keep when remaining offers equal open slots", () => {
-    expect(mustKeep(4, 1)).toBe(true);
-    expect(mustKeep(3, 2)).toBe(true);
-    expect(mustKeep(3, 3)).toBe(false);
-    expect(canSkip(3, 3)).toBe(true);
-    expect(canSkip(4, 1)).toBe(false);
-    expect(canSkip(4, 2)).toBe(true);
+    expect(mustKeep(2, 1)).toBe(true);
+    expect(mustKeep(1, 2)).toBe(true);
+    expect(mustKeep(1, 3)).toBe(false);
+    expect(canSkip(1, 3)).toBe(true);
+    expect(canSkip(2, 1)).toBe(false);
+    expect(canSkip(2, 2)).toBe(true);
   });
 
-  it("deals strong, weak, and wise cards then shuffles", () => {
+  it("deals 2 strong, 2 weak, 2 wise, and 2 random cards then shuffles", () => {
     type Card = { id: number; strength: "strong" | "weak" | "wise" };
     const strong: Card[] = Array.from({ length: 20 }, (_, i) => ({ id: i, strength: "strong" }));
     const weak: Card[] = Array.from({ length: 20 }, (_, i) => ({ id: 100 + i, strength: "weak" }));
     const wise: Card[] = Array.from({ length: 20 }, (_, i) => ({ id: 200 + i, strength: "wise" }));
     const deal = buildDeal(strong, weak, wise, seq(42));
-    expect(deal).toHaveLength(10);
-    expect(deal.filter((c) => c.strength === "strong")).toHaveLength(4);
-    expect(deal.filter((c) => c.strength === "weak")).toHaveLength(3);
-    expect(deal.filter((c) => c.strength === "wise")).toHaveLength(3);
+    expect(deal).toHaveLength(8);
+    expect(new Set(deal.map((c) => c.id)).size).toBe(8);
+    expect(deal.filter((c) => c.strength === "strong").length).toBeGreaterThanOrEqual(2);
+    expect(deal.filter((c) => c.strength === "weak").length).toBeGreaterThanOrEqual(2);
+    expect(deal.filter((c) => c.strength === "wise").length).toBeGreaterThanOrEqual(2);
   });
 
   it("builds a full round-robin of matchups", () => {
@@ -162,7 +163,7 @@ describe("matto flow", () => {
 
     const draft = tg.sentTo(anna.id).filter((c) => c.params.reply_markup).at(-1);
     expect(draft?.params.text).toContain("Daily Mättö");
-    expect(draft?.params.text).toContain("Hahmo 1/10");
+    expect(draft?.params.text).toContain("Hahmo 1/8");
 
     const day = await env.DB.prepare("SELECT day, closed_at FROM matto_days WHERE day = ?").bind(DAY).first();
     expect(day).toEqual({ day: DAY, closed_at: null });
@@ -170,10 +171,10 @@ describe("matto flow", () => {
     const offers = await env.DB.prepare("SELECT COUNT(*) AS n FROM matto_offers WHERE day = ? AND player_id = ?")
       .bind(DAY, anna.id)
       .first<{ n: number }>();
-    expect(offers?.n).toBe(10);
+    expect(offers?.n).toBe(8);
   });
 
-  it("keeps and skips through a draft until five are chosen", async () => {
+  it("keeps and skips through a draft until three are chosen", async () => {
     await register();
     await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/matto"));
     await draftFive(anna);
@@ -188,13 +189,13 @@ describe("matto flow", () => {
     )
       .bind(DAY, anna.id)
       .first<{ n: number }>();
-    expect(kept?.n).toBe(5);
+    expect(kept?.n).toBe(3);
   });
 
   it("accepts draft keep/skip as plain text without buttons", async () => {
     await register();
     await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/matto"));
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 4; i++) {
       await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, i % 2 === 0 ? "pidä" : "ohita"));
     }
     // May need more keeps if skips used — keep until done
@@ -214,7 +215,7 @@ describe("matto flow", () => {
     )
       .bind(DAY, anna.id)
       .first<{ n: number }>();
-    expect(kept?.n).toBe(5);
+    expect(kept?.n).toBe(3);
   });
 
   it("opens anonymous voting once everyone has drafted", async () => {

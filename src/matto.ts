@@ -1,6 +1,6 @@
-// Daily Mättö: each player drafts 5 characters from a personal deal of 10 (5 strong + 5 weak,
-// shuffled). Then anonymous round-robin 1v1 voting under one revealed day theme. You don't vote
-// on matchups involving your own team. Contests start on a random weekday or via /matto.
+// Daily Mättö: each player drafts 3 characters from a personal deal of 8 (2 strong + 2 weak +
+// 2 wise + 2 random, shuffled). Then anonymous round-robin 1v1 voting under one revealed day
+// theme. You don't vote on matchups involving your own team. Contests start on a random weekday or via /matto.
 // Placements use category "matto" and never feed the daily overall score.
 
 import { dayIsClosed, isGroupMember, reply, sendToGroup, today, tryCall, type Ctx } from "./chat";
@@ -12,11 +12,12 @@ import { addDays, daysBetween, localParts, weekMonday } from "./time";
 
 export const DRAFT_TIME = "09:00";
 export const DRAFT_DEADLINE = "21:00";
-export const OFFER_COUNT = 10;
-export const KEEP_COUNT = 5;
-export const STRONG_PER_DEAL = 4;
-export const WEAK_PER_DEAL = 3;
-export const WISE_PER_DEAL = 3;
+export const OFFER_COUNT = 8;
+export const KEEP_COUNT = 3;
+export const STRONG_PER_DEAL = 2;
+export const WEAK_PER_DEAL = 2;
+export const WISE_PER_DEAL = 2;
+export const RANDOM_PER_DEAL = 2;
 
 const TEAM_LABELS = ["Alfa", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel"];
 
@@ -41,7 +42,10 @@ export function canSkip(kept: number, remainingIncludingCurrent: number, target 
   return remainingIncludingCurrent - 1 >= target - kept;
 }
 
-/** Build a 10-card deal: 4 strong + 3 weak + 3 wise (or 5 strong + 5 weak when wise omitted), then shuffle. */
+/**
+ * Build an 8-card deal: 2 strong + 2 weak + 2 wise + 2 random from remaining characters
+ * (or 4 strong + 4 weak when wise is omitted), then shuffle into random order.
+ */
 export function buildDeal<S, W, Z = never>(
   strong: readonly S[],
   weak: readonly W[],
@@ -50,21 +54,36 @@ export function buildDeal<S, W, Z = never>(
 ): (S | W | Z)[] {
   if (typeof wiseOrRand === "function" || wiseOrRand === undefined) {
     const r = typeof wiseOrRand === "function" ? wiseOrRand : rand;
-    if (strong.length < 5 || weak.length < 5) {
+    const half = OFFER_COUNT / 2;
+    if (strong.length < half || weak.length < half) {
       throw new Error("Not enough characters to deal");
     }
-    const pickStrong = shuffled(strong, r).slice(0, 5);
-    const pickWeak = shuffled(weak, r).slice(0, 5);
+    const pickStrong = shuffled(strong, r).slice(0, half);
+    const pickWeak = shuffled(weak, r).slice(0, half);
     return shuffled([...pickStrong, ...pickWeak], r);
   }
   const wise = wiseOrRand;
-  if (strong.length < STRONG_PER_DEAL || weak.length < WEAK_PER_DEAL || wise.length < WISE_PER_DEAL) {
+  if (
+    strong.length < STRONG_PER_DEAL ||
+    weak.length < WEAK_PER_DEAL ||
+    wise.length < WISE_PER_DEAL ||
+    strong.length + weak.length + wise.length < OFFER_COUNT
+  ) {
     throw new Error("Not enough characters to deal");
   }
-  const pickStrong = shuffled(strong, rand).slice(0, STRONG_PER_DEAL);
-  const pickWeak = shuffled(weak, rand).slice(0, WEAK_PER_DEAL);
-  const pickWise = shuffled(wise, rand).slice(0, WISE_PER_DEAL);
-  return shuffled([...pickStrong, ...pickWeak, ...pickWise], rand);
+  const shuffledStrong = shuffled(strong, rand);
+  const shuffledWeak = shuffled(weak, rand);
+  const shuffledWise = shuffled(wise, rand);
+  const pickStrong = shuffledStrong.slice(0, STRONG_PER_DEAL);
+  const pickWeak = shuffledWeak.slice(0, WEAK_PER_DEAL);
+  const pickWise = shuffledWise.slice(0, WISE_PER_DEAL);
+  const remainingPool = [
+    ...shuffledStrong.slice(STRONG_PER_DEAL),
+    ...shuffledWeak.slice(WEAK_PER_DEAL),
+    ...shuffledWise.slice(WISE_PER_DEAL),
+  ];
+  const pickRandom = shuffled(remainingPool, rand).slice(0, RANDOM_PER_DEAL);
+  return shuffled([...pickStrong, ...pickWeak, ...pickWise, ...pickRandom], rand);
 }
 
 /** Every unordered pair as matchups, in shuffled order. */
@@ -395,7 +414,7 @@ function renderAnnouncement(botUsername: string | null, startedByName: string | 
   return [
     `⚔️ <b>Daily Mättö alkaa!</b>`,
     "",
-    `${who} mättö-pelin. Jokainen saa yksityisviestinä 10 hahmoa yksi kerrallaan — pidä tai ohita, kunnes joukkueessa on ${KEEP_COUNT}.`,
+    `${who} mättö-pelin. Jokainen saa yksityisviestinä ${OFFER_COUNT} hahmoa yksi kerrallaan — pidä tai ohita, kunnes joukkueessa on ${KEEP_COUNT}.`,
     `Tarjouksissa on vahvoja, viisaita ja heikkoja hahmoja (järjestys sekoitettu).`,
     "",
     `Draft ja äänestys toimivat myös ilman nappeja: vastaa botille <code>pidä</code>/<code>ohita</code>, äänestyksessä joukkueen nimellä (esim. <code>Alfa</code>).`,
@@ -590,7 +609,11 @@ export async function startMatto(ctx: Ctx, settings: Settings, day: string, star
     charactersByStrength(ctx.db, "weak"),
     charactersByStrength(ctx.db, "wise"),
   ]);
-  if (strong.length < STRONG_PER_DEAL || weak.length < WEAK_PER_DEAL) {
+  if (
+    strong.length < STRONG_PER_DEAL ||
+    weak.length < WEAK_PER_DEAL ||
+    strong.length + weak.length + wise.length < OFFER_COUNT
+  ) {
     return "Hahmolista on liian lyhyt draftia varten.";
   }
 
