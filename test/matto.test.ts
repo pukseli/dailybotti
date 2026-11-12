@@ -6,6 +6,7 @@ import {
   buildDeal,
   buildMatchups,
   canSkip,
+  computeMattoStatChanges,
   isBallotComplete,
   matchupsForVoter,
   mattoPercent,
@@ -151,6 +152,30 @@ describe("matto pure helpers", () => {
     expect(isBallotComplete(3, 3)).toBe(true);
     expect(isBallotComplete(2, 3)).toBe(false);
   });
+
+  it("awards +1 to winners, -1 to last place, and 0 to ranks 2-3", () => {
+    const standings = [
+      { playerId: 101, rank: 1, value: 100 },
+      { playerId: 102, rank: 2, value: 66.7 },
+      { playerId: 103, rank: 3, value: 33.3 },
+      { playerId: 104, rank: 4, value: 0 },
+    ];
+    const teamChars = new Map<number, number[]>([
+      [101, [1, 2, 3]],
+      [102, [4, 5, 6]],
+      [103, [7, 8, 9]],
+      [104, [10, 11, 12]],
+    ]);
+    const changes = computeMattoStatChanges(standings, teamChars, "int", "wis");
+    expect(changes).toEqual([
+      { characterId: 1, stat: "int", delta: 1 },
+      { characterId: 2, stat: "int", delta: 1 },
+      { characterId: 3, stat: "int", delta: 1 },
+      { characterId: 10, stat: "wis", delta: -1 },
+      { characterId: 11, stat: "wis", delta: -1 },
+      { characterId: 12, stat: "wis", delta: -1 },
+    ]);
+  });
 });
 
 describe("matto flow", () => {
@@ -164,6 +189,7 @@ describe("matto flow", () => {
     const draft = tg.sentTo(anna.id).filter((c) => c.params.reply_markup).at(-1);
     expect(draft?.params.text).toContain("Daily Mättö");
     expect(draft?.params.text).toContain("Hahmo 1/8");
+    expect(draft?.params.text).toMatch(/STR \d+ · DEX \d+ · CON \d+ · INT \d+ · WIS \d+ · CHA \d+/);
 
     const day = await env.DB.prepare("SELECT day, closed_at FROM matto_days WHERE day = ?").bind(DAY).first();
     expect(day).toEqual({ day: DAY, closed_at: null });
@@ -286,7 +312,13 @@ describe("matto flow", () => {
 
     const results = tg.sentTo(GROUP).map((c) => c.params.text as string).find((t) => t.includes("tulokset"));
     expect(results).toContain("Teema:");
+    expect(results).toContain("Statsimuutokset:");
     expect(results).toContain(anna.first_name);
+
+    const statChanges = await env.DB.prepare("SELECT COUNT(*) AS n FROM matto_stat_changes WHERE day = ?")
+      .bind(DAY)
+      .first<{ n: number }>();
+    expect(statChanges?.n).toBeGreaterThan(0);
 
     const placements = await env.DB.prepare("SELECT COUNT(*) AS n FROM placements WHERE day = ? AND category = 'matto'")
       .bind(DAY)

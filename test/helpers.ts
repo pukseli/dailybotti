@@ -164,6 +164,7 @@ export async function resetDb(): Promise<void> {
   await env.DB.batch(
     // Children before parents: D1 enforces the foreign keys.
     [
+      "matto_stat_changes",
       "matto_votes",
       "matto_ballots",
       "matto_matchups",

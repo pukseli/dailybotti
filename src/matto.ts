@@ -157,10 +157,66 @@ export function isVoterBallotDone(cursor: number, allMatchups: MatchupRow[], vot
 
 // ---------- data ----------
 
+export type DndStat = "str" | "dex" | "con" | "int" | "wis" | "cha";
+export const DND_STATS: readonly DndStat[] = ["str", "dex", "con", "int", "wis", "cha"];
+
+export interface CharacterStats {
+  str: number;
+  dex: number;
+  con: number;
+  int: number;
+  wis: number;
+  cha: number;
+}
+
+export interface StatChange {
+  characterId: number;
+  stat: DndStat;
+  delta: number;
+}
+
+/**
+ * Computes +1 (winStat) for rank 1 teams and -1 (loseStat) for last-place teams.
+ * Middle ranks (e.g. 2–3 in a 4-player game) receive no stat changes.
+ */
+export function computeMattoStatChanges(
+  standings: readonly { playerId: number; rank: number; value: number }[],
+  teamCharacterIds: ReadonlyMap<number, readonly number[]>,
+  winStat: DndStat,
+  loseStat: DndStat,
+): StatChange[] {
+  if (standings.length === 0) return [];
+  const maxRank = Math.max(...standings.map((s) => s.rank));
+  const changes: StatChange[] = [];
+  for (const s of standings) {
+    const charIds = teamCharacterIds.get(s.playerId) ?? [];
+    if (s.rank === 1) {
+      for (const characterId of charIds) {
+        changes.push({ characterId, stat: winStat, delta: 1 });
+      }
+    } else if (maxRank > 1 && s.rank === maxRank) {
+      for (const characterId of charIds) {
+        changes.push({ characterId, stat: loseStat, delta: -1 });
+      }
+    }
+  }
+  return changes;
+}
+
+export function formatStats(c: CharacterStats): string {
+  return `STR ${c.str} · DEX ${c.dex} · CON ${c.con} · INT ${c.int} · WIS ${c.wis} · CHA ${c.cha}`;
+}
+
+export function formatThemeStakes(winStat: DndStat, loseStat: DndStat): string {
+  return `Voittajille +1 ${winStat.toUpperCase()} · Häviäjille -1 ${loseStat.toUpperCase()}`;
+}
+
 export interface MattoDay {
   day: string;
   theme_id: number;
   theme_text: string;
+  win_stat: DndStat;
+  lose_stat: DndStat;
   started_by: number | null;
   announce_message_id: number | null;
   vote_opened_at: string | null;
@@ -170,13 +226,13 @@ export interface MattoDay {
 
 export type CharacterStrength = "strong" | "weak" | "wise";
 
-interface CharacterRow {
+interface CharacterRow extends CharacterStats {
   id: number;
   name: string;
   strength: CharacterStrength;
 }
 
-interface OfferRow {
+interface OfferRow extends CharacterStats {
   day: string;
   player_id: number;
   position: number;
@@ -211,7 +267,7 @@ interface BallotRow {
   updated_at: string | null;
 }
 
-const DAY_COLUMNS = `d.day, d.theme_id, t.text AS theme_text, d.started_by, d.announce_message_id,
+const DAY_COLUMNS = `d.day, d.theme_id, t.text AS theme_text, t.win_stat, t.lose_stat, d.started_by, d.announce_message_id,
   d.vote_opened_at, d.vote_message_id, d.closed_at
   FROM matto_days d JOIN matto_themes t ON t.id = d.theme_id`;
 
@@ -228,7 +284,7 @@ async function openMattoDays(db: D1Database): Promise<MattoDay[]> {
 
 async function charactersByStrength(db: D1Database, strength: CharacterStrength): Promise<CharacterRow[]> {
   const { results } = await db
-    .prepare("SELECT id, name, strength FROM matto_characters WHERE strength = ?")
+    .prepare("SELECT id, name, strength, str, dex, con, int, wis, cha FROM matto_characters WHERE strength = ?")
     .bind(strength)
     .all<CharacterRow>();
   return results;
@@ -237,7 +293,8 @@ async function charactersByStrength(db: D1Database, strength: CharacterStrength)
 async function offersFor(db: D1Database, day: string, playerId: number): Promise<OfferRow[]> {
   const { results } = await db
     .prepare(
-      `SELECT o.day, o.player_id, o.position, o.character_id, c.name, c.strength, o.decision, o.decided_at
+      `SELECT o.day, o.player_id, o.position, o.character_id, c.name, c.strength,
+              c.str, c.dex, c.con, c.int, c.wis, c.cha, o.decision, o.decided_at
        FROM matto_offers o JOIN matto_characters c ON c.id = o.character_id
        WHERE o.day = ? AND o.player_id = ?
        ORDER BY o.position`,
@@ -296,9 +353,9 @@ async function getBallot(db: D1Database, day: string, voterId: number): Promise<
     .first<BallotRow>();
 }
 
-async function keptNames(db: D1Database, day: string, playerId: number): Promise<string[]> {
+async function keptOffers(db: D1Database, day: string, playerId: number): Promise<OfferRow[]> {
   const offers = await offersFor(db, day, playerId);
-  return offers.filter((o) => o.decision === "keep" || o.decision === "forced").map((o) => o.name);
+  return offers.filter((o) => o.decision === "keep" || o.decision === "forced");
 }
 
 async function claimWeek(db: D1Database, day: string): Promise<void> {
@@ -364,19 +421,27 @@ function draftProgress(offers: OfferRow[]): { kept: number; index: number; remai
 function renderDraftCard(opts: {
   day: string;
   characterName: string;
+  characterStats: CharacterStats;
   position: number;
   kept: number;
   remaining: number;
   forced: boolean;
-  keptNames: string[];
+  keptOffers: OfferRow[];
 }): { text: string; keyboard: InlineKeyboardButton[][] } {
   const lines = [
     `⚔️ <b>Daily Mättö</b> · draft ${opts.day}`,
     "",
     `Hahmo ${opts.position + 1}/${OFFER_COUNT}: <b>${escapeHtml(opts.characterName)}</b>`,
+    `📊 <code>${formatStats(opts.characterStats)}</code>`,
     `Valittu ${opts.kept}/${KEEP_COUNT} · tarjouksia jäljellä ${opts.remaining}`,
   ];
-  if (opts.keptNames.length) lines.push("", `Joukkueesi: ${opts.keptNames.map(escapeHtml).join(" · ")}`);
+  if (opts.keptOffers.length) {
+    lines.push(
+      "",
+      `Joukkueesi: ${opts.keptOffers.map((c) => escapeHtml(c.name)).join(" · ")}`,
+      ...opts.keptOffers.map((c) => `• ${escapeHtml(c.name)}: <code>${formatStats(c)}</code>`),
+    );
+  }
   if (opts.forced) {
     lines.push("", "Pakko ottaa — valittavia paikkoja on jäljellä yhtä monta kuin hahmoja.");
     lines.push("Vastaa: <code>pidä</code> (tai napilla).");
@@ -397,12 +462,12 @@ function renderDraftCard(opts: {
   };
 }
 
-function renderDraftDone(day: string, names: string[]): string {
+function renderDraftDone(day: string, chars: OfferRow[]): string {
   return [
     `⚔️ <b>Daily Mättö</b> · draft valmis · ${day}`,
     "",
     `Joukkueesi (${KEEP_COUNT}):`,
-    ...names.map((n) => `• ${escapeHtml(n)}`),
+    ...chars.map((c) => `• <b>${escapeHtml(c.name)}</b> — <code>${formatStats(c)}</code>`),
     "",
     "Äänestys alkaa, kun kaikki ovat valinneet (tai draftin deadline menee umpeen). Teema paljastuu äänestyksessä; et äänestä oman joukkueesi otteluita.",
   ].join("\n");
@@ -426,21 +491,27 @@ function renderAnnouncement(botUsername: string | null, startedByName: string | 
 function renderBallot(opts: {
   day: string;
   theme: string;
+  winStat: DndStat;
+  loseStat: DndStat;
   cursor: number;
   matchups: MatchupRow[];
   labels: Map<number, string>;
-  roster: Map<number, string[]>;
+  roster: Map<number, OfferRow[]>;
 }): { text: string; keyboard: InlineKeyboardButton[][] } {
   const lines = [
     `⚔️ <b>Daily Mättö</b> · äänestys · ${opts.day}`,
     `<b>Teema:</b> ${escapeHtml(opts.theme)}`,
+    `🎲 <b>Panos:</b> ${formatThemeStakes(opts.winStat, opts.loseStat)}`,
     "<i>Joukkueiden omistajat paljastetaan tuloksissa. Et äänestä otteluita, joissa oma joukkueesi on mukana.</i>",
     "",
     "<b>Joukkueet</b>",
   ];
   for (const [playerId, label] of [...opts.labels.entries()].sort((a, b) => a[1].localeCompare(b[1], "fi"))) {
     const chars = opts.roster.get(playerId) ?? [];
-    lines.push(`• <b>${escapeHtml(label)}</b>: ${chars.map(escapeHtml).join(", ")}`);
+    lines.push(`• <b>${escapeHtml(label)}</b>: ${chars.map((c) => escapeHtml(c.name)).join(", ")}`);
+    for (const c of chars) {
+      lines.push(`  ◦ ${escapeHtml(c.name)}: <code>${formatStats(c)}</code>`);
+    }
   }
 
   if (opts.matchups.length === 0) {
@@ -475,6 +546,8 @@ function renderBallot(opts: {
 function renderVoteStatus(opts: {
   day: string;
   theme?: string | null;
+  winStat?: DndStat | null;
+  loseStat?: DndStat | null;
   voters: { id: number; done: boolean }[];
   unreachable: number[];
   names: Map<number, string>;
@@ -503,11 +576,13 @@ function renderVoteStatus(opts: {
   }
 
   const done = opts.voters.filter((v) => v.done);
+  const stakes = opts.winStat && opts.loseStat ? `🎲 <b>Panos:</b> ${formatThemeStakes(opts.winStat, opts.loseStat)}` : "";
   const lines = opts.closed
     ? [`⚔️ <b>Daily Mättö</b> · äänestys päättyi · ${opts.day}`]
     : [
         `⚔️ <b>Daily Mättö</b> · äänestys käynnissä · ${opts.day}`,
         opts.theme ? `<b>Teema:</b> ${escapeHtml(opts.theme)}` : "",
+        stakes,
         `Joukkueet anonyymejä; et äänestä oman joukkueesi otteluita. Äänestys päättyy, kun kaikki ovat äänestäneet, viimeistään ${closesLabel(opts.closeTime)}.`,
       ].filter(Boolean);
   lines.push("", `Äänestäneet (${done.length}/${opts.voters.length}): ${done.length ? done.map((v) => nameOf(opts.names, v.id)).join(", ") : "–"}`);
@@ -524,16 +599,19 @@ function renderVoteStatus(opts: {
 function renderResults(opts: {
   day: string;
   theme: string;
+  winStat: DndStat;
+  loseStat: DndStat;
   standings: { playerId: number; rank: number; value: number }[];
   scores: Map<number, MattoScore>;
   names: Map<number, string>;
   labels: Map<number, string>;
-  roster: Map<number, string[]>;
+  roster: Map<number, OfferRow[]>;
 }): string {
   const lines = [
     `⚔️ <b>Daily Mättö – tulokset</b> · ${opts.day}`,
     "",
     `<b>Teema:</b> ${escapeHtml(opts.theme)}`,
+    `🎲 <b>Statsimuutokset:</b> ${formatThemeStakes(opts.winStat, opts.loseStat)}`,
     "",
     "<b>Sijoitukset</b>",
   ];
@@ -545,10 +623,20 @@ function renderResults(opts: {
       `${placeMark(s.rank)} ${nameOf(opts.names, s.playerId)}${labelBit} · ${score.points}/${score.max} ääntä (${s.value.toFixed(1)} %)`,
     );
   }
+  const maxRank = opts.standings.length ? Math.max(...opts.standings.map((s) => s.rank)) : 0;
   lines.push("", "<b>Joukkueet</b>");
   for (const s of opts.standings) {
     const chars = opts.roster.get(s.playerId) ?? [];
-    lines.push(`• ${nameOf(opts.names, s.playerId)}: ${chars.map(escapeHtml).join(", ")}`);
+    const deltaTag =
+      s.rank === 1
+        ? ` <b>(+1 ${opts.winStat.toUpperCase()})</b>`
+        : maxRank > 1 && s.rank === maxRank
+          ? ` <b>(-1 ${opts.loseStat.toUpperCase()})</b>`
+          : "";
+    lines.push(`• ${nameOf(opts.names, s.playerId)}${deltaTag}: ${chars.map((c) => escapeHtml(c.name)).join(", ")}`);
+    for (const c of chars) {
+      lines.push(`  ◦ ${escapeHtml(c.name)}: <code>${formatStats(c)}</code>`);
+    }
   }
   return fit(lines);
 }
@@ -668,7 +756,7 @@ async function sendDraftCard(ctx: Ctx, day: string, playerId: number): Promise<b
     try {
       await ctx.tg.call("sendMessage", {
         chat_id: playerId,
-        text: renderDraftDone(day, await keptNames(ctx.db, day, playerId)),
+        text: renderDraftDone(day, await keptOffers(ctx.db, day, playerId)),
         parse_mode: "HTML",
         link_preview_options: { is_disabled: true },
       });
@@ -683,15 +771,16 @@ async function sendDraftCard(ctx: Ctx, day: string, playerId: number): Promise<b
   if (index >= offers.length) return true;
   const current = offers[index]!;
   const forced = mustKeep(kept, remaining);
-  const keptList = offers.filter((o) => o.decision === "keep" || o.decision === "forced").map((o) => o.name);
+  const keptList = offers.filter((o) => o.decision === "keep" || o.decision === "forced");
   const { text, keyboard } = renderDraftCard({
     day,
     characterName: current.name,
+    characterStats: current,
     position: current.position,
     kept,
     remaining,
     forced,
-    keptNames: keptList,
+    keptOffers: keptList,
   });
 
   try {
@@ -738,6 +827,8 @@ async function refreshGroupStatus(ctx: Ctx, settings: Settings, day: string): Pr
   const text = renderVoteStatus({
     day,
     theme: phase === "vote" ? row.theme_text : null,
+    winStat: phase === "vote" ? row.win_stat : null,
+    loseStat: phase === "vote" ? row.lose_stat : null,
     voters: ballots.map((b) => ({ id: b.voter_id, done: isVoterBallotDone(b.cursor, matchups, b.voter_id) })),
     unreachable:
       phase === "vote"
@@ -769,9 +860,9 @@ async function completeDraft(ctx: Ctx, settings: Settings, day: string, playerId
     .prepare("UPDATE matto_teams SET completed_at = ? WHERE day = ? AND player_id = ? AND completed_at IS NULL")
     .bind(nowIso, day, playerId)
     .run();
-  const names = await keptNames(ctx.db, day, playerId);
+  const chars = await keptOffers(ctx.db, day, playerId);
   const team = await getTeam(ctx.db, day, playerId);
-  const text = renderDraftDone(day, names);
+  const text = renderDraftDone(day, chars);
   try {
     if (team?.draft_message_id) {
       await ctx.tg.call("editMessageText", {
@@ -856,9 +947,9 @@ export async function openMattoVote(ctx: Ctx, settings: Settings, day: string): 
   await refreshGroupStatus(ctx, settings, day);
 }
 
-async function rosterMap(db: D1Database, day: string, playerIds: number[]): Promise<Map<number, string[]>> {
-  const map = new Map<number, string[]>();
-  for (const id of playerIds) map.set(id, await keptNames(db, day, id));
+async function rosterMap(db: D1Database, day: string, playerIds: number[]): Promise<Map<number, OfferRow[]>> {
+  const map = new Map<number, OfferRow[]>();
+  for (const id of playerIds) map.set(id, await keptOffers(db, day, id));
   return map;
 }
 
@@ -881,6 +972,8 @@ async function sendMattoBallot(ctx: Ctx, settings: Settings, day: string, voterI
   const { text, keyboard } = renderBallot({
     day,
     theme: dayRow.theme_text,
+    winStat: dayRow.win_stat,
+    loseStat: dayRow.lose_stat,
     cursor: ballot.cursor,
     matchups: mine,
     labels,
@@ -914,6 +1007,63 @@ async function sendMattoBallot(ctx: Ctx, settings: Settings, day: string, voterI
     console.warn("matto ballot not delivered", err instanceof Error ? err.message : err);
     return false;
   }
+}
+
+async function revertMattoStatChanges(db: D1Database, day: string): Promise<void> {
+  const { results } = await db
+    .prepare("SELECT character_id, stat, delta FROM matto_stat_changes WHERE day = ?")
+    .bind(day)
+    .all<{ character_id: number; stat: DndStat; delta: number }>();
+  if (results.length === 0) return;
+  const stmts: D1PreparedStatement[] = [];
+  for (const r of results) {
+    if (!DND_STATS.includes(r.stat)) continue;
+    stmts.push(
+      db
+        .prepare(`UPDATE matto_characters SET ${r.stat} = MAX(1, ${r.stat} - ?) WHERE id = ?`)
+        .bind(r.delta, r.character_id),
+    );
+  }
+  stmts.push(db.prepare("DELETE FROM matto_stat_changes WHERE day = ?").bind(day));
+  await db.batch(stmts);
+}
+
+async function applyMattoStatChanges(
+  db: D1Database,
+  day: string,
+  standings: readonly { playerId: number; rank: number; value: number }[],
+  roster: ReadonlyMap<number, readonly OfferRow[]>,
+  winStat: DndStat,
+  loseStat: DndStat,
+): Promise<void> {
+  await revertMattoStatChanges(db, day);
+  const teamCharIds = new Map<number, number[]>();
+  for (const [playerId, chars] of roster) {
+    teamCharIds.set(
+      playerId,
+      chars.map((c) => c.character_id),
+    );
+  }
+  const changes = computeMattoStatChanges(standings, teamCharIds, winStat, loseStat);
+  if (changes.length === 0) return;
+  const stmts: D1PreparedStatement[] = [];
+  for (const ch of changes) {
+    if (!DND_STATS.includes(ch.stat)) continue;
+    stmts.push(
+      db
+        .prepare(
+          `INSERT INTO matto_stat_changes (day, character_id, stat, delta) VALUES (?, ?, ?, ?)
+           ON CONFLICT(day, character_id, stat) DO UPDATE SET delta = matto_stat_changes.delta + excluded.delta`,
+        )
+        .bind(day, ch.characterId, ch.stat, ch.delta),
+    );
+    stmts.push(
+      db
+        .prepare(`UPDATE matto_characters SET ${ch.stat} = MAX(1, ${ch.stat} + ?) WHERE id = ?`)
+        .bind(ch.delta, ch.characterId),
+    );
+  }
+  await db.batch(stmts);
 }
 
 async function closeMatto(ctx: Ctx, settings: Settings, day: string, cancelled: boolean): Promise<void> {
@@ -962,20 +1112,25 @@ async function closeMatto(ctx: Ctx, settings: Settings, day: string, cancelled: 
     ["matto"],
   );
 
+  const initialRoster = await rosterMap(ctx.db, day, teamIds);
+  await applyMattoStatChanges(ctx.db, day, standings, initialRoster, row.win_stat, row.lose_stat);
+  const updatedRoster = await rosterMap(ctx.db, day, teamIds);
+
   const names = displayNames(players);
   const labels = await labelMap(finished);
-  const roster = await rosterMap(ctx.db, day, teamIds);
   await sendToGroup(
     ctx,
     settings,
     renderResults({
       day,
       theme: row.theme_text,
+      winStat: row.win_stat,
+      loseStat: row.lose_stat,
       standings,
       scores: counted,
       names,
       labels,
-      roster,
+      roster: updatedRoster,
     }),
   );
 }
@@ -1336,6 +1491,7 @@ export async function handleMattoText(ctx: Ctx, msg: Message, user: User, text: 
 
 /** Wipe votes/ballots/matchups and reopen the day for a fresh vote (teams kept). */
 async function clearMattoVotePhase(db: D1Database, day: string): Promise<void> {
+  await revertMattoStatChanges(db, day);
   await db.batch([
     db
       .prepare(
@@ -1356,6 +1512,7 @@ async function clearMattoVotePhase(db: D1Database, day: string): Promise<void> {
 
 /** Delete today's entire contest so /matto can start from scratch. */
 async function wipeMattoDay(db: D1Database, day: string): Promise<void> {
+  await revertMattoStatChanges(db, day);
   await db.batch([
     db
       .prepare(
@@ -1555,6 +1712,8 @@ export async function challengeMattoCommand(ctx: Ctx, msg: Message): Promise<voi
       renderResults({
         day,
         theme: row.theme_text,
+        winStat: row.win_stat,
+        loseStat: row.lose_stat,
         standings,
         scores: counted,
         names: displayNames(players),
@@ -1577,6 +1736,8 @@ export async function challengeMattoCommand(ctx: Ctx, msg: Message): Promise<voi
     renderVoteStatus({
       day,
       theme: row.vote_opened_at ? row.theme_text : null,
+      winStat: row.vote_opened_at ? row.win_stat : null,
+      loseStat: row.vote_opened_at ? row.lose_stat : null,
       voters: ballots.map((b) => ({ id: b.voter_id, done: isVoterBallotDone(b.cursor, matchups, b.voter_id) })),
       unreachable: [],
       names: displayNames(players),
