@@ -164,6 +164,9 @@ export async function resetDb(): Promise<void> {
   await env.DB.batch(
     // Children before parents: D1 enforces the foreign keys.
     [
+      "matto_removal_votes",
+      "matto_removal_polls",
+      "matto_removed_characters",
       "matto_stat_changes",
       "matto_votes",
       "matto_ballots",
@@ -184,4 +187,5 @@ export async function resetDb(): Promise<void> {
       "settings",
     ].map((t) => env.DB.prepare(`DELETE FROM ${t}`)),
   );
+  await env.DB.prepare("UPDATE matto_characters SET retired_at = NULL WHERE retired_at IS NOT NULL").run();
 }

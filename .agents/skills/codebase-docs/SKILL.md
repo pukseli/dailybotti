@@ -234,6 +234,10 @@ Located in [`src/regressio.ts`](file:///c:/Users/akseli/git/dailybotti/src/regre
 | `results` | `(player_id, game, day)` | `puzzle`, `score`, `max_score`, `submitted_at`, `rounds_json`, `raw_text` | Idempotent first-submission storage. |
 | `days` | `day` (`YYYY-MM-DD`) | `board_message_id`, `board_text`, `board_claim_until`, `finalized_at` | Tracks live group board message ID and lock status. |
 | `placements` | `(day, category, player_id)` | `rank`, `value` | Closed day standings per game and overall. |
+| `matto_characters` | `id` | `name`, `strength`, `str`, `dex`, `con`, `int`, `wis`, `cha`, `retired_at` | Daily Mättö character catalog and D&D stats. Soft delete via `retired_at`. |
+| `matto_removed_characters` | `(player_id, character_id)` | `day`, `removed_at` | Per-player excluded characters (never dealt to this player again). |
+| `matto_removal_polls` | `id` | `character_id`, `day`, `message_id`, `status`, `resolved_at` | Group removal votes for nominated characters. |
+| `matto_removal_votes` | `(poll_id, voter_id)` | `choice`, `updated_at` | Votes (`remove` / `keep`) on removal polls. |
 
 ---
 

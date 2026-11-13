@@ -54,6 +54,18 @@ export function canSkip(kept: number, remainingIncludingCurrent: number, target 
   return remainingIncludingCurrent - 1 >= target - kept;
 }
 
+export function canRemove(kept: number, remainingIncludingCurrent: number, replacementAvailable: boolean): boolean {
+  return replacementAvailable || canSkip(kept, remainingIncludingCurrent);
+}
+
+/** Majority of registered players removes; 'kept' once removal can no longer win. */
+export function removalOutcome(remove: number, keep: number, players: number): "retired" | "kept" | "open" {
+  const needed = Math.floor(players / 2) + 1;
+  if (remove >= needed) return "retired";
+  if (players - keep < needed) return "kept";
+  return "open";
+}
+
 /**
  * Build an 8-card deal: 2 strong + 2 weak + 2 wise + 2 random from remaining characters
  * (or 4 strong + 4 weak when wise is omitted), then shuffle into random order.
@@ -242,6 +254,7 @@ interface CharacterRow extends CharacterStats {
   id: number;
   name: string;
   strength: CharacterStrength;
+  retired_at?: string | null;
 }
 
 interface OfferRow extends CharacterStats {
@@ -296,10 +309,87 @@ async function openMattoDays(db: D1Database): Promise<MattoDay[]> {
 
 async function charactersByStrength(db: D1Database, strength: CharacterStrength): Promise<CharacterRow[]> {
   const { results } = await db
-    .prepare("SELECT id, name, strength, str, dex, con, int, wis, cha FROM matto_characters WHERE strength = ?")
+    .prepare(
+      "SELECT id, name, strength, str, dex, con, int, wis, cha, retired_at FROM matto_characters WHERE strength = ? AND retired_at IS NULL",
+    )
     .bind(strength)
     .all<CharacterRow>();
   return results;
+}
+
+async function removedCharacterIds(db: D1Database, playerId: number): Promise<Set<number>> {
+  const { results } = await db
+    .prepare("SELECT character_id FROM matto_removed_characters WHERE player_id = ?")
+    .bind(playerId)
+    .all<{ character_id: number }>();
+  return new Set(results.map((r) => r.character_id));
+}
+
+async function pickReplacement(
+  db: D1Database,
+  day: string,
+  playerId: number,
+  strength: CharacterStrength,
+): Promise<CharacterRow | null> {
+  const query = `
+    SELECT id, name, strength, str, dex, con, int, wis, cha, retired_at
+    FROM matto_characters
+    WHERE retired_at IS NULL
+      AND strength = ?
+      AND id NOT IN (SELECT character_id FROM matto_offers WHERE day = ? AND player_id = ?)
+      AND id NOT IN (SELECT character_id FROM matto_removed_characters WHERE player_id = ?)
+    ORDER BY RANDOM() LIMIT 1
+  `;
+  const preferred = await db.prepare(query).bind(strength, day, playerId, playerId).first<CharacterRow>();
+  if (preferred) return preferred;
+
+  const fallbackQuery = `
+    SELECT id, name, strength, str, dex, con, int, wis, cha, retired_at
+    FROM matto_characters
+    WHERE retired_at IS NULL
+      AND id NOT IN (SELECT character_id FROM matto_offers WHERE day = ? AND player_id = ?)
+      AND id NOT IN (SELECT character_id FROM matto_removed_characters WHERE player_id = ?)
+    ORDER BY RANDOM() LIMIT 1
+  `;
+  const fallback = await db.prepare(fallbackQuery).bind(day, playerId, playerId).first<CharacterRow>();
+  return fallback ?? null;
+}
+
+async function nominateForRemoval(
+  db: D1Database,
+  day: string,
+  playerId: number,
+  characterId: number,
+  nowIso: string,
+): Promise<void> {
+  let poll = await db
+    .prepare("SELECT id FROM matto_removal_polls WHERE character_id = ? AND status = 'open'")
+    .bind(characterId)
+    .first<{ id: number }>();
+
+  if (!poll) {
+    await db
+      .prepare(
+        "INSERT INTO matto_removal_polls (character_id, day, message_id, status, resolved_at) VALUES (?, ?, NULL, 'open', NULL)",
+      )
+      .bind(characterId, day)
+      .run();
+    poll = await db
+      .prepare("SELECT id FROM matto_removal_polls WHERE character_id = ? AND status = 'open'")
+      .bind(characterId)
+      .first<{ id: number }>();
+  }
+
+  if (poll) {
+    await db
+      .prepare(
+        `INSERT INTO matto_removal_votes (poll_id, voter_id, choice, updated_at)
+         VALUES (?, ?, 'remove', ?)
+         ON CONFLICT(poll_id, voter_id) DO UPDATE SET choice = 'remove', updated_at = excluded.updated_at`,
+      )
+      .bind(poll.id, playerId, nowIso)
+      .run();
+  }
 }
 
 async function offersFor(db: D1Database, day: string, playerId: number): Promise<OfferRow[]> {
@@ -435,22 +525,37 @@ function renderDraftCard(opts: {
   characterName: string;
   characterStats: CharacterStats;
   position: number;
+  totalOffers: number;
   kept: number;
   remaining: number;
   forced: boolean;
+  canRemove: boolean;
   keptOffers: OfferRow[];
 }): { text: string; keyboard: InlineKeyboardButton[][] } {
   const testTag = isTestMattoDay(opts.day) ? " (testipeli)" : "";
   const lines = [
     `⚔️ <b>Daily Mättö${testTag}</b> · draft ${displayDay(opts.day)}`,
     "",
-    `Hahmo ${opts.position + 1}/${OFFER_COUNT}: <b>${escapeHtml(opts.characterName)}</b>`,
+    `Hahmo ${opts.position + 1}/${opts.totalOffers}: <b>${escapeHtml(opts.characterName)}</b>`,
     `Valittu ${opts.kept}/${KEEP_COUNT} · tarjouksia jäljellä ${opts.remaining}`,
   ];
   if (opts.keptOffers.length) {
     lines.push("", `Joukkueesi: ${opts.keptOffers.map((c) => escapeHtml(c.name)).join(" · ")}`);
   }
   if (opts.forced) {
+    if (opts.canRemove) {
+      lines.push("", "Pakko ottaa tai poistaa — valittavia paikkoja on jäljellä yhtä monta kuin hahmoja.");
+      lines.push("Vastaa: <code>pidä</code> tai <code>poista</code> (tai napeilla).");
+      return {
+        text: lines.join("\n"),
+        keyboard: [
+          [
+            { text: "✅ Pidä", callback_data: `mk:${opts.day}:${opts.position}` },
+            { text: "🗑️ Poista", callback_data: `mx:${opts.day}:${opts.position}` },
+          ],
+        ],
+      };
+    }
     lines.push("", "Pakko ottaa — valittavia paikkoja on jäljellä yhtä monta kuin hahmoja.");
     lines.push("Vastaa: <code>pidä</code> (tai napilla).");
     return {
@@ -458,13 +563,15 @@ function renderDraftCard(opts: {
       keyboard: [[{ text: "✅ Pidä", callback_data: `mk:${opts.day}:${opts.position}` }]],
     };
   }
-  lines.push("", "Pidä vai ohita? Vastaa <code>pidä</code> / <code>ohita</code> (tai <code>p</code> / <code>o</code>), tai käytä nappeja.");
+  lines.push("", "Pidä, ohita vai poista? Vastaa <code>pidä</code> / <code>ohita</code> / <code>poista</code> (tai <code>p</code> / <code>o</code> / <code>x</code>), tai käytä nappeja.");
+  lines.push("<i>🗑️ Poista ohittaa hahmon, et saa sitä enää ja se menee poistoäänestykseen. Ensimmäinen poisto arpoo uuden hahmon tilalle.</i>");
   return {
     text: lines.join("\n"),
     keyboard: [
       [
         { text: "✅ Pidä", callback_data: `mk:${opts.day}:${opts.position}` },
         { text: "⏭️ Ohita", callback_data: `ms:${opts.day}:${opts.position}` },
+        { text: "🗑️ Poista", callback_data: `mx:${opts.day}:${opts.position}` },
       ],
     ],
   };
@@ -493,7 +600,8 @@ function renderAnnouncement(botUsername: string | null, startedByName: string | 
     `${who} mättö-pelin. Jokainen saa yksityisviestinä ${OFFER_COUNT} hahmoa yksi kerrallaan — pidä tai ohita, kunnes joukkueessa on ${KEEP_COUNT}.`,
     `Tarjouksissa on vahvoja, viisaita ja heikkoja hahmoja (järjestys sekoitettu).`,
     "",
-    `Draft ja äänestys toimivat myös ilman nappeja: vastaa botille <code>pidä</code>/<code>ohita</code>, äänestyksessä joukkueen nimellä (esim. <code>Alfa</code>).`,
+    `Draft ja äänestys toimivat myös ilman nappeja: vastaa botille <code>pidä</code>/<code>ohita</code>/<code>poista</code>, äänestyksessä joukkueen nimellä (esim. <code>Alfa</code>).`,
+    `🗑️ Poista-valinta ohittaa hahmon, arpoo tilalle yhden uuden hahmon ja vie sen mätön päättyessä ryhmän poistoäänestykseen.`,
     `Draft päättyy klo ${DRAFT_DEADLINE} (tai heti kun kaikki ovat valmiita). Äänestyksessä teema paljastuu; et äänestä oman joukkueesi otteluita.`,
     `Jos et ole avannut ${bot} yksityisesti, avaa ja paina Start.`,
   ];
@@ -673,7 +781,20 @@ async function dealForPlayer(
   weak: CharacterRow[],
   wise: CharacterRow[],
 ): Promise<void> {
-  const deal = wise.length >= WISE_PER_DEAL ? buildDeal(strong, weak, wise) : buildDeal(strong, weak);
+  const removed = await removedCharacterIds(db, playerId);
+  const filterRemoved = (list: CharacterRow[]) => list.filter((c) => !removed.has(c.id));
+
+  let playerStrong = filterRemoved(strong);
+  let playerWeak = filterRemoved(weak);
+  let playerWise = filterRemoved(wise);
+
+  if (playerStrong.length < STRONG_PER_DEAL) playerStrong = strong;
+  if (playerWeak.length < WEAK_PER_DEAL) playerWeak = weak;
+  if (playerWise.length < WISE_PER_DEAL) playerWise = wise;
+
+  const deal = playerWise.length >= WISE_PER_DEAL
+    ? buildDeal(playerStrong, playerWeak, playerWise)
+    : buildDeal(playerStrong, playerWeak);
   const stmts = deal.map((c, position) =>
     db
       .prepare(
@@ -784,15 +905,19 @@ async function sendDraftCard(ctx: Ctx, day: string, playerId: number): Promise<b
   if (index >= offers.length) return true;
   const current = offers[index]!;
   const forced = mustKeep(kept, remaining);
+  const replacementAvailable = offers.length <= OFFER_COUNT;
+  const canRemoveCard = canRemove(kept, remaining, replacementAvailable);
   const keptList = offers.filter((o) => o.decision === "keep" || o.decision === "forced");
   const { text, keyboard } = renderDraftCard({
     day,
     characterName: current.name,
     characterStats: current,
     position: current.position,
+    totalOffers: offers.length,
     kept,
     remaining,
     forced,
+    canRemove: canRemoveCard,
     keptOffers: keptList,
   });
 
@@ -1079,6 +1204,117 @@ async function applyMattoStatChanges(
   await db.batch(stmts);
 }
 
+interface RemovalPollRow {
+  id: number;
+  character_id: number;
+  day: string;
+  message_id: number | null;
+  status: "open" | "retired" | "kept";
+  resolved_at: string | null;
+  character_name: string;
+  remove_count: number;
+  keep_count: number;
+}
+
+function renderRemovalPollMessage(
+  day: string,
+  polls: RemovalPollRow[],
+  playerCount: number,
+): { text: string; keyboard: InlineKeyboardButton[][] } {
+  const isTest = isTestMattoDay(day);
+  const testTag = isTest ? " (testipelistä)" : "";
+  const isoDay = displayDay(day);
+  const needed = Math.floor(playerCount / 2) + 1;
+
+  const lines = [
+    `🗳️ <b>Daily Mättö${testTag} · poistoäänestys · ${isoDay}</b>`,
+    `Poistuu kaikilta, jos vähintään ${needed}/${playerCount} äänestää 🗑️.`,
+    "",
+  ];
+
+  const keyboard: InlineKeyboardButton[][] = [];
+
+  for (const p of polls) {
+    if (p.status === "retired") {
+      lines.push(`🗑️ <b><s>${escapeHtml(p.character_name)}</s></b> — poistettu pelistä (🗑️ ${p.remove_count} · ✅ ${p.keep_count})`);
+    } else if (p.status === "kept") {
+      lines.push(`✅ <b>${escapeHtml(p.character_name)}</b> — pysyy pelissä (🗑️ ${p.remove_count} · ✅ ${p.keep_count})`);
+    } else {
+      lines.push(`• <b>${escapeHtml(p.character_name)}</b> — 🗑️ ${p.remove_count} · ✅ ${p.keep_count}`);
+      const shortName = p.character_name.length > 22 ? p.character_name.slice(0, 20) + "…" : p.character_name;
+      keyboard.push([
+        { text: `🗑️ ${shortName}`, callback_data: `mp:${p.id}:r` },
+        { text: "✅ Pidä", callback_data: `mp:${p.id}:k` },
+      ]);
+    }
+  }
+
+  return { text: fit(lines), keyboard };
+}
+
+async function pollsForMessage(db: D1Database, messageId: number): Promise<RemovalPollRow[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT p.id, p.character_id, p.day, p.message_id, p.status, p.resolved_at,
+              c.name AS character_name,
+              COALESCE(SUM(CASE WHEN v.choice = 'remove' THEN 1 ELSE 0 END), 0) AS remove_count,
+              COALESCE(SUM(CASE WHEN v.choice = 'keep' THEN 1 ELSE 0 END), 0) AS keep_count
+       FROM matto_removal_polls p
+       JOIN matto_characters c ON c.id = p.character_id
+       LEFT JOIN matto_removal_votes v ON v.poll_id = p.id
+       WHERE p.message_id = ?
+       GROUP BY p.id
+       ORDER BY p.id`,
+    )
+    .bind(messageId)
+    .all<RemovalPollRow>();
+  return results;
+}
+
+async function unpostedPollsForDay(db: D1Database, day: string): Promise<RemovalPollRow[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT p.id, p.character_id, p.day, p.message_id, p.status, p.resolved_at,
+              c.name AS character_name,
+              COALESCE(SUM(CASE WHEN v.choice = 'remove' THEN 1 ELSE 0 END), 0) AS remove_count,
+              COALESCE(SUM(CASE WHEN v.choice = 'keep' THEN 1 ELSE 0 END), 0) AS keep_count
+       FROM matto_removal_polls p
+       JOIN matto_characters c ON c.id = p.character_id
+       LEFT JOIN matto_removal_votes v ON v.poll_id = p.id
+       WHERE p.day = ? AND p.message_id IS NULL
+       GROUP BY p.id
+       ORDER BY p.id`,
+    )
+    .bind(day)
+    .all<RemovalPollRow>();
+  return results;
+}
+
+export async function postRemovalVote(ctx: Ctx, settings: Settings, day: string): Promise<void> {
+  const unposted = await unpostedPollsForDay(ctx.db, day);
+  if (unposted.length === 0) return;
+
+  const players = await allPlayers(ctx.db);
+  const { text, keyboard } = renderRemovalPollMessage(day, unposted, players.length);
+
+  try {
+    const sent = await sendToGroup(
+      ctx,
+      settings,
+      text,
+      keyboard.length > 0 ? { replyMarkup: { inline_keyboard: keyboard } } : {},
+    );
+    const pollIds = unposted.map((p) => p.id);
+    await ctx.db.batch(
+      pollIds.map((id) =>
+        ctx.db.prepare("UPDATE matto_removal_polls SET message_id = ? WHERE id = ?").bind(sent.message_id, id),
+      ),
+    );
+  } catch (err) {
+    console.warn("failed to post matto removal vote", err instanceof Error ? err.message : err);
+  }
+}
+
 async function closeMatto(ctx: Ctx, settings: Settings, day: string, cancelled: boolean): Promise<void> {
   const isTest = isTestMattoDay(day);
   const closed = await ctx.db
@@ -1092,7 +1328,8 @@ async function closeMatto(ctx: Ctx, settings: Settings, day: string, cancelled: 
 
   if (cancelled) {
     await refreshGroupStatus(ctx, settings, day);
-    if (isTest) await wipeMattoDay(ctx.db, day);
+    await postRemovalVote(ctx, settings, day);
+    if (isTest) await wipeMattoDay(ctx.db, day, { keepRemovals: true });
     return;
   }
 
@@ -1116,7 +1353,8 @@ async function closeMatto(ctx: Ctx, settings: Settings, day: string, cancelled: 
   const counted = new Map([...scores].filter(([, s]) => s.max > 0));
   if (counted.size === 0) {
     await sendToGroup(ctx, settings, `⚔️ Daily Mättö (${displayDay(day)}): äänestys päättyi, mutta ääniä ei tullut.`);
-    if (isTest) await wipeMattoDay(ctx.db, day);
+    await postRemovalVote(ctx, settings, day);
+    if (isTest) await wipeMattoDay(ctx.db, day, { keepRemovals: true });
     return;
   }
 
@@ -1154,8 +1392,10 @@ async function closeMatto(ctx: Ctx, settings: Settings, day: string, cancelled: 
     }),
   );
 
+  await postRemovalVote(ctx, settings, day);
+
   if (isTest) {
-    await wipeMattoDay(ctx.db, day);
+    await wipeMattoDay(ctx.db, day, { keepRemovals: true });
   }
 }
 
@@ -1199,9 +1439,15 @@ export async function handleMattoTap(ctx: Ctx, settings: Settings, cq: CallbackQ
   const answer = (text: string) => tryCall(ctx, "answerCallbackQuery", { callback_query_id: cq.id, text });
   const data = cq.data ?? "";
 
-  const draft = /^m([ks]):((?:test:)?\d{4}-\d{2}-\d{2}):(\d+)$/.exec(data);
+  const draft = /^m([ksx]):((?:test:)?\d{4}-\d{2}-\d{2}):(\d+)$/.exec(data);
   if (draft) {
-    await handleDraftTap(ctx, settings, cq, draft[1] as "k" | "s", draft[2]!, Number(draft[3]), answer);
+    await handleDraftTap(ctx, settings, cq, draft[1] as "k" | "s" | "x", draft[2]!, Number(draft[3]), answer);
+    return;
+  }
+
+  const pollVote = /^mp:(\d+):([rk])$/.exec(data);
+  if (pollVote) {
+    await handleRemovalPollVote(ctx, settings, cq, Number(pollVote[1]), pollVote[2] as "r" | "k", answer);
     return;
   }
 
@@ -1220,13 +1466,13 @@ export async function handleMattoTap(ctx: Ctx, settings: Settings, cq: CallbackQ
   await answer("");
 }
 
-/** Shared draft keep/skip. `expectedPosition` is set for button taps; text replies use the current card. */
+/** Shared draft keep/skip/remove. `expectedPosition` is set for button taps; text replies use the current card. */
 async function applyDraftChoice(
   ctx: Ctx,
   settings: Settings,
   playerId: number,
   day: string,
-  kind: "k" | "s",
+  kind: "k" | "s" | "x",
   expectedPosition: number | null,
 ): Promise<{ ok: boolean; note: string }> {
   const row = await getMattoDay(ctx.db, day);
@@ -1243,10 +1489,17 @@ async function applyDraftChoice(
     return { ok: false, note: "Tämä tarjous ei ole enää voimassa. Katso uusin draft-viesti tai lähetä /matto." };
   }
 
+  const replacementAvailable = offers.length <= OFFER_COUNT;
+
   let decision: "keep" | "skip" | "forced";
   if (kind === "s") {
     if (!canSkip(kept, remaining) || mustKeep(kept, remaining)) {
       return { ok: false, note: "Et voi ohittaa — tämä hahmo on pakko ottaa. Vastaa: pidä" };
+    }
+    decision = "skip";
+  } else if (kind === "x") {
+    if (!canRemove(kept, remaining, replacementAvailable)) {
+      return { ok: false, note: "Et voi poistaa — tämä hahmo on pakko ottaa (korvaava hahmo on jo käytetty). Vastaa: pidä" };
     }
     decision = "skip";
   } else {
@@ -1258,9 +1511,47 @@ async function applyDraftChoice(
     .bind(decision, ctx.now.toISOString(), day, playerId, current.position)
     .run();
 
+  let replaced = false;
+  if (kind === "x") {
+    const isoDay = displayDay(day);
+    const nowIso = ctx.now.toISOString();
+    await ctx.db
+      .prepare(
+        `INSERT INTO matto_removed_characters (player_id, character_id, day, removed_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(player_id, character_id) DO NOTHING`,
+      )
+      .bind(playerId, current.character_id, isoDay, nowIso)
+      .run();
+
+    await nominateForRemoval(ctx.db, day, playerId, current.character_id, nowIso);
+
+    if (replacementAvailable) {
+      const repl = await pickReplacement(ctx.db, day, playerId, current.strength);
+      if (repl) {
+        const nextPos = offers.length;
+        await ctx.db
+          .prepare(
+            `INSERT INTO matto_offers (day, player_id, position, character_id, decision, decided_at)
+             VALUES (?, ?, ?, ?, NULL, NULL)`,
+          )
+          .bind(day, playerId, nextPos, repl.id)
+          .run();
+        replaced = true;
+      }
+    }
+  }
+
   const nextOffers = await offersFor(ctx.db, day, playerId);
   const nextKept = nextOffers.filter((o) => o.decision === "keep" || o.decision === "forced").length;
-  const note = decision === "skip" ? "Ohitettu." : "Pidetty!";
+  let note: string;
+  if (kind === "x") {
+    note = replaced ? "Poistettu — uusi hahmo arvottu tilalle." : "Poistettu.";
+  } else if (decision === "skip") {
+    note = "Ohitettu.";
+  } else {
+    note = "Pidetty!";
+  }
 
   if (nextKept >= KEEP_COUNT) {
     const leftovers = nextOffers.filter((o) => o.decision === null);
@@ -1279,7 +1570,8 @@ async function applyDraftChoice(
 
   let working = await offersFor(ctx.db, day, playerId);
   let prog = draftProgress(working);
-  while (prog.remaining > 0 && mustKeep(prog.kept, prog.remaining) && prog.kept < KEEP_COUNT) {
+  const repAvail = working.length <= OFFER_COUNT;
+  while (!repAvail && prog.remaining > 0 && mustKeep(prog.kept, prog.remaining) && prog.kept < KEEP_COUNT) {
     const card = working[prog.index]!;
     await ctx.db
       .prepare("UPDATE matto_offers SET decision = 'forced', decided_at = ? WHERE day = ? AND player_id = ? AND position = ?")
@@ -1371,11 +1663,109 @@ async function applyVoteChoice(
   return { ok: true, note: "Ääni tallessa." };
 }
 
+async function handleRemovalPollVote(
+  ctx: Ctx,
+  settings: Settings,
+  cq: CallbackQuery,
+  pollId: number,
+  choice: "r" | "k",
+  answer: (text: string) => Promise<boolean>,
+): Promise<void> {
+  const players = await allPlayers(ctx.db);
+  const isRegistered = players.some((p) => p.id === cq.from.id);
+  if (!isRegistered) {
+    await answer("Vain rekisteröityneet pelaajat voivat äänestää.");
+    return;
+  }
+
+  const poll = await ctx.db
+    .prepare(
+      `SELECT p.id, p.character_id, p.day, p.message_id, p.status, p.resolved_at, c.name AS character_name
+       FROM matto_removal_polls p
+       JOIN matto_characters c ON c.id = p.character_id
+       WHERE p.id = ?`,
+    )
+    .bind(pollId)
+    .first<{ id: number; character_id: number; day: string; message_id: number | null; status: "open" | "retired" | "kept"; resolved_at: string | null; character_name: string }>();
+
+  if (!poll) {
+    await answer("Äänestystä ei löytynyt.");
+    return;
+  }
+  if (poll.status !== "open") {
+    await answer("Tämä äänestys on jo ratkennut.");
+    return;
+  }
+
+  const choiceDb = choice === "r" ? "remove" : "keep";
+  await ctx.db
+    .prepare(
+      `INSERT INTO matto_removal_votes (poll_id, voter_id, choice, updated_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(poll_id, voter_id) DO UPDATE SET choice = excluded.choice, updated_at = excluded.updated_at`,
+    )
+    .bind(pollId, cq.from.id, choiceDb, ctx.now.toISOString())
+    .run();
+
+  const votes = await ctx.db
+    .prepare("SELECT choice, COUNT(*) AS count FROM matto_removal_votes WHERE poll_id = ? GROUP BY choice")
+    .bind(pollId)
+    .all<{ choice: string; count: number }>();
+  const removeCount = votes.results.find((v) => v.choice === "remove")?.count ?? 0;
+  const keepCount = votes.results.find((v) => v.choice === "keep")?.count ?? 0;
+
+  const outcome = removalOutcome(removeCount, keepCount, players.length);
+  let note = choice === "r" ? "Ääni annettu: 🗑️ Poista" : "Ääni annettu: ✅ Pidä";
+  if (outcome === "retired") {
+    const nowIso = ctx.now.toISOString();
+    await ctx.db
+      .prepare("UPDATE matto_removal_polls SET status = 'retired', resolved_at = ? WHERE id = ?")
+      .bind(nowIso, pollId)
+      .run();
+    await ctx.db
+      .prepare("UPDATE matto_characters SET retired_at = ? WHERE id = ?")
+      .bind(nowIso, poll.character_id)
+      .run();
+    note = `🗑️ ${poll.character_name} poistettu pelistä!`;
+  } else if (outcome === "kept") {
+    const nowIso = ctx.now.toISOString();
+    await ctx.db
+      .prepare("UPDATE matto_removal_polls SET status = 'kept', resolved_at = ? WHERE id = ?")
+      .bind(nowIso, pollId)
+      .run();
+    note = `✅ ${poll.character_name} pysyy pelissä!`;
+  }
+
+  await answer(note);
+
+  const messageId = poll.message_id ?? cq.message?.message_id;
+  if (messageId && settings.groupChatId) {
+    const allInMessage = await pollsForMessage(ctx.db, messageId);
+    if (allInMessage.length > 0) {
+      const { text, keyboard } = renderRemovalPollMessage(poll.day, allInMessage, players.length);
+      try {
+        await ctx.tg.call("editMessageText", {
+          chat_id: settings.groupChatId,
+          message_id: messageId,
+          text,
+          parse_mode: "HTML",
+          link_preview_options: { is_disabled: true },
+          reply_markup: keyboard.length > 0 ? { inline_keyboard: keyboard } : undefined,
+        });
+      } catch (err) {
+        if (!isNotModified(err)) {
+          console.warn("failed to edit removal poll message", err instanceof Error ? err.message : err);
+        }
+      }
+    }
+  }
+}
+
 async function handleDraftTap(
   ctx: Ctx,
   settings: Settings,
   cq: CallbackQuery,
-  kind: "k" | "s",
+  kind: "k" | "s" | "x",
   day: string,
   position: number,
   answer: (text: string) => Promise<boolean>,
@@ -1429,10 +1819,11 @@ function normalizeMattoText(text: string): string {
     .replace(/^\/+/, "");
 }
 
-export function parseDraftTextChoice(text: string): "k" | "s" | null {
+export function parseDraftTextChoice(text: string): "k" | "s" | "x" | null {
   const t = normalizeMattoText(text);
   if (["pida", "keep", "p", "+"].includes(t)) return "k";
   if (["ohita", "skip", "o", "-"].includes(t)) return "s";
+  if (["poista", "remove", "x", "del", "delete"].includes(t)) return "x";
   return null;
 }
 
@@ -1549,9 +1940,9 @@ async function clearMattoVotePhase(db: D1Database, day: string): Promise<void> {
 }
 
 /** Delete today's entire contest so /matto can start from scratch. */
-async function wipeMattoDay(db: D1Database, day: string): Promise<void> {
+async function wipeMattoDay(db: D1Database, day: string, opts?: { keepRemovals?: boolean }): Promise<void> {
   await revertMattoStatChanges(db, day);
-  await db.batch([
+  const stmts = [
     db
       .prepare(
         `DELETE FROM matto_votes WHERE matchup_id IN (SELECT id FROM matto_matchups WHERE day = ?)`,
@@ -1563,7 +1954,15 @@ async function wipeMattoDay(db: D1Database, day: string): Promise<void> {
     db.prepare("DELETE FROM matto_teams WHERE day = ?").bind(day),
     db.prepare("DELETE FROM matto_days WHERE day = ?").bind(day),
     db.prepare("DELETE FROM placements WHERE day = ? AND category = 'matto'").bind(day),
-  ]);
+  ];
+  if (!opts?.keepRemovals) {
+    stmts.push(
+      db.prepare(`DELETE FROM matto_removal_votes WHERE poll_id IN (SELECT id FROM matto_removal_polls WHERE day = ?)`).bind(day),
+      db.prepare(`DELETE FROM matto_removal_polls WHERE day = ?`).bind(day),
+      db.prepare(`DELETE FROM matto_removed_characters WHERE day = ?`).bind(displayDay(day)),
+    );
+  }
+  await db.batch(stmts);
 }
 
 // ---------- commands ----------
@@ -1827,7 +2226,7 @@ export async function statsitCommand(ctx: Ctx, msg: Message, rawText: string): P
   }
 
   const { results } = await ctx.db
-    .prepare("SELECT id, name, strength, str, dex, con, int, wis, cha FROM matto_characters ORDER BY name")
+    .prepare("SELECT id, name, strength, str, dex, con, int, wis, cha, retired_at FROM matto_characters ORDER BY name")
     .all<CharacterRow>();
 
   const norm = (s: string) =>
@@ -1852,13 +2251,17 @@ export async function statsitCommand(ctx: Ctx, msg: Message, rawText: string): P
 
   if (matches.length === 1) {
     const c = matches[0]!;
-    await reply(ctx, msg, `🎲 <b>${escapeHtml(c.name)}</b>\n📊 <code>${formatStats(c)}</code>`);
+    const retiredNote = c.retired_at ? " <i>(poistettu pelistä)</i>" : "";
+    await reply(ctx, msg, `🎲 <b>${escapeHtml(c.name)}</b>${retiredNote}\n📊 <code>${formatStats(c)}</code>`);
     return;
   }
 
   const limit = 8;
   const shown = matches.slice(0, limit);
-  const lines = shown.map((c) => `• <b>${escapeHtml(c.name)}</b>: <code>${formatStats(c)}</code>`);
+  const lines = shown.map((c) => {
+    const retiredNote = c.retired_at ? " <i>(poistettu)</i>" : "";
+    return `• <b>${escapeHtml(c.name)}</b>${retiredNote}: <code>${formatStats(c)}</code>`;
+  });
   if (matches.length > limit) {
     lines.push("", `<i>…ja ${matches.length - limit} muuta osumaa (tarkenna hakua).</i>`);
   }

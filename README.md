@@ -132,6 +132,11 @@ The imitation contest is separate from the daily games and podiums; its medals a
 | `/ehdota Nimi` | both | Adds a character or person to the imitation draw |
 | `/ehdotukset` | both | Lists the suggestions still in the draw |
 | `/aanesta` | private | Sends you a new imitation ballot, e.g. if the first one couldn't be delivered |
+| `/matto` | group | Starts Daily Mättö (draft 3 from 8+ offers, anonymous 1v1 round-robin voting) |
+| `/testimatto` | group | Starts an ephemeral Daily Mättö test game without saving results or D&D stats |
+| `/mattotilanne` | both | Shows draft/vote progress or final results for today's Daily Mättö |
+| `/mattonollaa [kaikki]` | group | Resets today's Daily Mättö vote phase (or `kaikki` to wipe entire contest) |
+| `/statsit [nimi]` | both | Shows a character's D&D stats (STR, DEX, CON, INT, WIS, CHA) |
 | `/setup` | group | Links the bot to the group (admins only) |
 
 ## Maintenance

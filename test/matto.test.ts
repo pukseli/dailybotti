@@ -5,6 +5,7 @@ import { COMMAND_MENUS } from "../src/commands";
 import {
   buildDeal,
   buildMatchups,
+  canRemove,
   canSkip,
   computeMattoStatChanges,
   isBallotComplete,
@@ -12,6 +13,8 @@ import {
   mattoPercent,
   mattoScores,
   mustKeep,
+  parseDraftTextChoice,
+  removalOutcome,
   shuffled,
 } from "../src/matto";
 import {
@@ -90,6 +93,22 @@ async function keepNext(user: User, messageId: number): Promise<void> {
   await handleUpdate(makeCtx(tg, FRI_NOON), tap(user, keep.callback_data, messageId));
 }
 
+async function removeNext(user: User, messageId: number): Promise<void> {
+  const card = latestKeyboard(user.id);
+  const remove = (card.params.reply_markup.inline_keyboard as { callback_data: string }[][])
+    .flat()
+    .find((b) => b.callback_data.startsWith("mx:"))!;
+  await handleUpdate(makeCtx(tg, FRI_NOON), tap(user, remove.callback_data, messageId));
+}
+
+async function skipNext(user: User, messageId: number): Promise<void> {
+  const card = latestKeyboard(user.id);
+  const skip = (card.params.reply_markup.inline_keyboard as { callback_data: string }[][])
+    .flat()
+    .find((b) => b.callback_data.startsWith("ms:"))!;
+  await handleUpdate(makeCtx(tg, FRI_NOON), tap(user, skip.callback_data, messageId));
+}
+
 async function draftFive(user: User): Promise<void> {
   const messageId = firstDraftMessageId(user.id);
   for (let i = 0; i < 3; i++) await keepNext(user, messageId);
@@ -111,6 +130,48 @@ describe("matto pure helpers", () => {
     expect(canSkip(1, 3)).toBe(true);
     expect(canSkip(2, 1)).toBe(false);
     expect(canSkip(2, 2)).toBe(true);
+  });
+
+  it("determines whether a card can be removed", () => {
+    // When replacement is available, remove is always allowed even if mustKeep is true
+    expect(canRemove(2, 1, true)).toBe(true);
+    expect(canRemove(1, 2, true)).toBe(true);
+    expect(canRemove(0, 8, true)).toBe(true);
+
+    // When replacement is already used (false), remove follows canSkip
+    expect(canRemove(2, 1, false)).toBe(false);
+    expect(canRemove(1, 2, false)).toBe(false);
+    expect(canRemove(1, 3, false)).toBe(true);
+    expect(canRemove(2, 2, false)).toBe(true);
+  });
+
+  it("calculates removal poll outcome based on majority of players", () => {
+    // 4 players -> majority needed is Math.floor(4/2)+1 = 3
+    expect(removalOutcome(3, 0, 4)).toBe("retired");
+    expect(removalOutcome(3, 1, 4)).toBe("retired");
+    expect(removalOutcome(2, 1, 4)).toBe("open");
+    expect(removalOutcome(1, 1, 4)).toBe("open");
+    // If 2 have voted keep, max possible remove is 4 - 2 = 2 < 3 -> kept!
+    expect(removalOutcome(0, 2, 4)).toBe("kept");
+    expect(removalOutcome(1, 2, 4)).toBe("kept");
+    expect(removalOutcome(2, 2, 4)).toBe("kept");
+
+    // 5 players -> majority needed is Math.floor(5/2)+1 = 3
+    expect(removalOutcome(3, 0, 5)).toBe("retired");
+    expect(removalOutcome(2, 2, 5)).toBe("open");
+    expect(removalOutcome(1, 3, 5)).toBe("kept");
+  });
+
+  it("parses text choice including removal", () => {
+    expect(parseDraftTextChoice("pidä")).toBe("k");
+    expect(parseDraftTextChoice("p")).toBe("k");
+    expect(parseDraftTextChoice("ohita")).toBe("s");
+    expect(parseDraftTextChoice("o")).toBe("s");
+    expect(parseDraftTextChoice("poista")).toBe("x");
+    expect(parseDraftTextChoice("remove")).toBe("x");
+    expect(parseDraftTextChoice("x")).toBe("x");
+    expect(parseDraftTextChoice("del")).toBe("x");
+    expect(parseDraftTextChoice("tuntematon")).toBe(null);
   });
 
   it("deals 2 strong, 2 weak, 2 wise, and 2 random cards then shuffles", () => {
@@ -488,5 +549,266 @@ describe("matto flow", () => {
     const msg = tg.sentTo(GROUP).at(-1)?.params.text as string;
     expect(msg).toContain(char!.name);
     expect(msg).toMatch(/STR \d+ · DEX \d+ · CON \d+ · INT \d+ · WIS \d+ · CHA \d+/);
+  });
+
+  it("removes a character in draft, draws 1 replacement, and subsequent removals skip without extra cards", async () => {
+    await register();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/matto"));
+    const messageId = firstDraftMessageId(anna.id);
+
+    // 1st removal: replacement card is drawn (8 -> 9 offers)
+    await removeNext(anna, messageId);
+    const card2 = latestKeyboard(anna.id);
+    expect(String(card2.params.text)).toContain("Hahmo 2/9");
+
+    const removed1 = await env.DB.prepare(
+      "SELECT character_id FROM matto_removed_characters WHERE player_id = ?",
+    )
+      .bind(anna.id)
+      .all<{ character_id: number }>();
+    expect(removed1.results).toHaveLength(1);
+
+    const polls1 = await env.DB.prepare(
+      "SELECT id, character_id, status FROM matto_removal_polls WHERE status = 'open'",
+    ).all<{ id: number; character_id: number; status: string }>();
+    expect(polls1.results).toHaveLength(1);
+
+    const votes1 = await env.DB.prepare(
+      "SELECT voter_id, choice FROM matto_removal_votes WHERE poll_id = ?",
+    )
+      .bind(polls1.results[0]!.id)
+      .all<{ voter_id: number; choice: string }>();
+    expect(votes1.results).toEqual([{ voter_id: anna.id, choice: "remove" }]);
+
+    const totalOffers1 = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM matto_offers WHERE day = ? AND player_id = ?",
+    )
+      .bind(DAY, anna.id)
+      .first<{ n: number }>();
+    expect(totalOffers1?.n).toBe(9);
+
+    // 2nd removal: no extra card drawn (remains 9 offers)
+    await removeNext(anna, messageId);
+    const card3 = latestKeyboard(anna.id);
+    expect(String(card3.params.text)).toContain("Hahmo 3/9");
+
+    const removed2 = await env.DB.prepare(
+      "SELECT character_id FROM matto_removed_characters WHERE player_id = ?",
+    )
+      .bind(anna.id)
+      .all<{ character_id: number }>();
+    expect(removed2.results).toHaveLength(2);
+
+    const polls2 = await env.DB.prepare(
+      "SELECT id, character_id, status FROM matto_removal_polls WHERE status = 'open'",
+    ).all<{ id: number; character_id: number; status: string }>();
+    expect(polls2.results).toHaveLength(2);
+
+    const totalOffers2 = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM matto_offers WHERE day = ? AND player_id = ?",
+    )
+      .bind(DAY, anna.id)
+      .first<{ n: number }>();
+    expect(totalOffers2?.n).toBe(9);
+
+    // Anna keeps 3 cards to complete draft
+    for (let i = 0; i < 3; i++) await keepNext(anna, messageId);
+    const team = await env.DB.prepare(
+      "SELECT completed_at FROM matto_teams WHERE day = ? AND player_id = ?",
+    )
+      .bind(DAY, anna.id)
+      .first<{ completed_at: string | null }>();
+    expect(team?.completed_at).toBeTruthy();
+  });
+
+  it("allows removing a card when remaining offers equal needed slots if replacement is available", async () => {
+    await register();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/matto"));
+    const messageId = firstDraftMessageId(anna.id);
+
+    // Keep 2 cards
+    await keepNext(anna, messageId);
+    await keepNext(anna, messageId);
+
+    // Skip 5 cards (cards 2..6)
+    for (let i = 0; i < 5; i++) {
+      await skipNext(anna, messageId);
+    }
+
+    // Now at card 8 (position 7): kept 2, remaining 1.
+    // Because replacement is available, removal is allowed!
+    const card7 = latestKeyboard(anna.id);
+    expect(String(card7.params.text)).toContain("Pakko ottaa tai poistaa");
+    const buttons7 = (card7.params.reply_markup.inline_keyboard as { text: string }[][]).flat();
+    expect(buttons7.map((b) => b.text)).toEqual(["✅ Pidä", "🗑️ Poista"]);
+
+    // Remove this card: replacement card (position 8) is drawn.
+    // Since replacement is now used and remaining slots equal open slots, position 8 is auto-forced!
+    await removeNext(anna, messageId);
+
+    const card8Offer = await env.DB.prepare(
+      "SELECT decision FROM matto_offers WHERE day = ? AND player_id = ? AND position = 8",
+    )
+      .bind(DAY, anna.id)
+      .first<{ decision: string }>();
+    expect(card8Offer?.decision).toBe("forced");
+
+    const team = await env.DB.prepare(
+      "SELECT completed_at FROM matto_teams WHERE day = ? AND player_id = ?",
+    )
+      .bind(DAY, anna.id)
+      .first<{ completed_at: string | null }>();
+    expect(team?.completed_at).toBeTruthy();
+  });
+
+  it("runs group removal vote upon mättö close and retires or keeps nominated characters", async () => {
+    await register();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/matto"));
+
+    // Anna removes 2 characters then keeps 3
+    const annaDraftId = firstDraftMessageId(anna.id);
+    await removeNext(annaDraftId ? anna : anna, annaDraftId);
+    await removeNext(annaDraftId ? anna : anna, annaDraftId);
+    for (let i = 0; i < 3; i++) await keepNext(anna, annaDraftId);
+
+    // Ben, Chris, Dan draft normally
+    for (const p of [ben, chris, dan]) await draftFive(p);
+
+    // Everyone votes in matchups
+    for (const p of PLAYERS) {
+      const messageId = firstBallotMessageId(p.id);
+      for (let i = 0; i < 3; i++) {
+        const ballot = latestKeyboard(p.id);
+        const pick = (ballot.params.reply_markup.inline_keyboard as { callback_data: string }[][])
+          .flat()
+          .find((b) => b.callback_data.startsWith("mv:"));
+        if (!pick) break;
+        await handleUpdate(makeCtx(tg, FRI_NOON), tap(p, pick.callback_data, messageId));
+      }
+    }
+
+    // Results are posted, followed by the removal vote message in the group
+    const removalMsg = tg.sentTo(GROUP).find((c) => String(c.params.text).includes("poistoäänestys"));
+    expect(removalMsg).toBeTruthy();
+    expect(String(removalMsg?.params.text)).toContain("2026-10-23");
+    expect(String(removalMsg?.params.text)).toContain("Poistuu kaikilta, jos vähintään 3/4 äänestää 🗑️");
+
+    const openPolls = await env.DB.prepare(
+      "SELECT id, character_id FROM matto_removal_polls WHERE day = ? ORDER BY id",
+    )
+      .bind(DAY)
+      .all<{ id: number; character_id: number }>();
+    expect(openPolls.results).toHaveLength(2);
+    const [poll1, poll2] = openPolls.results;
+
+    // For poll1: Ben and Chris vote remove (3/4 remove votes -> retired!)
+    const msgId = removalMsg!.result.message_id as number;
+    await handleUpdate(makeCtx(tg, FRI_NOON), tap(ben, `mp:${poll1!.id}:r`, msgId));
+    await handleUpdate(makeCtx(tg, FRI_NOON), tap(chris, `mp:${poll1!.id}:r`, msgId));
+
+    const poll1Db = await env.DB.prepare("SELECT status FROM matto_removal_polls WHERE id = ?")
+      .bind(poll1!.id)
+      .first<{ status: string }>();
+    expect(poll1Db?.status).toBe("retired");
+
+    const char1 = await env.DB.prepare("SELECT retired_at FROM matto_characters WHERE id = ?")
+      .bind(poll1!.character_id)
+      .first<{ retired_at: string | null }>();
+    expect(char1?.retired_at).toBeTruthy();
+
+    // For poll2: Ben and Chris vote keep (2/4 keep votes -> kept!)
+    await handleUpdate(makeCtx(tg, FRI_NOON), tap(ben, `mp:${poll2!.id}:k`, msgId));
+    await handleUpdate(makeCtx(tg, FRI_NOON), tap(chris, `mp:${poll2!.id}:k`, msgId));
+
+    const poll2Db = await env.DB.prepare("SELECT status FROM matto_removal_polls WHERE id = ?")
+      .bind(poll2!.id)
+      .first<{ status: string }>();
+    expect(poll2Db?.status).toBe("kept");
+
+    const char2 = await env.DB.prepare("SELECT retired_at FROM matto_characters WHERE id = ?")
+      .bind(poll2!.character_id)
+      .first<{ retired_at: string | null }>();
+    expect(char2?.retired_at).toBeNull();
+
+    // Check statsit shows retired status
+    const char1Row = await env.DB.prepare("SELECT name FROM matto_characters WHERE id = ?")
+      .bind(poll1!.character_id)
+      .first<{ name: string }>();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, `/statsit [[${char1Row!.name}]]`));
+    const statsitMsg = tg.sentTo(GROUP).at(-1)?.params.text as string;
+    expect(statsitMsg).toContain("poistettu pelistä");
+  });
+
+  it("handles testipeli (/testimatto) removals and posts removal poll with (testipelistä)", async () => {
+    await register();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/testimatto"));
+
+    const messageId = firstDraftMessageId(anna.id);
+    await removeNext(anna, messageId);
+    for (let i = 0; i < 3; i++) await keepNext(anna, messageId);
+    for (const p of [ben, chris, dan]) await draftFive(p);
+
+    // Vote in test matchups
+    for (const p of PLAYERS) {
+      const bId = firstBallotMessageId(p.id);
+      for (let i = 0; i < 3; i++) {
+        const ballot = latestKeyboard(p.id);
+        const pick = (ballot.params.reply_markup.inline_keyboard as { callback_data: string }[][])
+          .flat()
+          .find((b) => b.callback_data.startsWith("mv:"));
+        if (!pick) break;
+        await handleUpdate(makeCtx(tg, FRI_NOON), tap(p, pick.callback_data, bId));
+      }
+    }
+
+    // Removal poll posted to group with (testipelistä)
+    const removalMsg = tg.sentTo(GROUP).find((c) => String(c.params.text).includes("poistoäänestys"));
+    expect(removalMsg).toBeTruthy();
+    expect(String(removalMsg?.params.text)).toContain("(testipelistä)");
+
+    // Even though test game was wiped, personal removal and removal poll are kept!
+    const removedCount = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM matto_removed_characters WHERE player_id = ?",
+    )
+      .bind(anna.id)
+      .first<{ n: number }>();
+    expect(removedCount?.n).toBe(1);
+
+    const pollCount = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM matto_removal_polls",
+    ).first<{ n: number }>();
+    expect(pollCount?.n).toBe(1);
+  });
+
+  it("rejects removal votes from unregistered users", async () => {
+    await register();
+    await handleUpdate(makeCtx(tg, FRI_NOON), inGroup(anna, "/matto"));
+    const messageId = firstDraftMessageId(anna.id);
+    await removeNext(anna, messageId);
+    for (let i = 0; i < 3; i++) await keepNext(anna, messageId);
+    for (const p of [ben, chris, dan]) await draftFive(p);
+
+    // Close mättö by voting
+    for (const p of PLAYERS) {
+      const bId = firstBallotMessageId(p.id);
+      for (let i = 0; i < 3; i++) {
+        const ballot = latestKeyboard(p.id);
+        const pick = (ballot.params.reply_markup.inline_keyboard as { callback_data: string }[][])
+          .flat()
+          .find((b) => b.callback_data.startsWith("mv:"));
+        if (!pick) break;
+        await handleUpdate(makeCtx(tg, FRI_NOON), tap(p, pick.callback_data, bId));
+      }
+    }
+
+    const poll = await env.DB.prepare("SELECT id FROM matto_removal_polls LIMIT 1").first<{ id: number }>();
+    expect(poll).toBeTruthy();
+
+    const stranger: User = { id: 777777, is_bot: false, first_name: "Tuntematon" };
+    await handleUpdate(makeCtx(tg, FRI_NOON), tap(stranger, `mp:${poll!.id}:r`, 9999));
+    const answer = tg.calls.find(
+      (c) => c.method === "answerCallbackQuery" && String(c.params.text).includes("Vain rekisteröityneet"),
+    );
+    expect(answer).toBeTruthy();
   });
 });
