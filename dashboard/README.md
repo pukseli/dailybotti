@@ -1,6 +1,6 @@
 # Dashboard
 
-A [marimo](https://marimo.io) notebook of the group's stats: player fact sheets, leaderboard, form over time,
+A [marimo](https://marimo.io) notebook of the group's stats: player fact sheets, leaderboard, streaks, form over time,
 consistency, who shows up and play patterns. It reads a snapshot of the bot's D1 database from `public/`, which
 is never committed.
 

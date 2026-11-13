@@ -526,6 +526,109 @@ def _(
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md("""
+    ## Streaks
+    Who's on a run right now, and the longest runs so far. Always over all time, whatever period is picked above.
+    """)
+    return
+
+
+@app.cell
+def _(GAMES, INK, RULE, gt, mo, picked, pl, placements, player_scale, results):
+    def _runs(flags):
+        """The run still going on the last day, and the longest run, of consecutive True values."""
+        now = best = 0
+        for flag in flags:
+            now = now + 1 if flag else 0
+            best = max(best, now)
+        return now, best
+
+    def _days_where(df):
+        return set(df["day"].to_list())
+
+    _last = results["day"].max()
+    # Playing counts calendar days. Wins and podiums count the days that had a podium, so a day off ends the run.
+    _calendar = pl.date_range(results["day"].min(), _last, eager=True).to_list()
+    _overall = placements.filter(pl.col("category") == "overall")
+    _podium_days = sorted(_days_where(_overall))
+    _game_days = {g: sorted(_days_where(placements.filter(pl.col("category") == g))) for g in GAMES}
+
+    _rows = []
+    for _w in [w for w in player_scale.domain if w in picked.value]:
+        _mine = _overall.filter(pl.col("who") == _w)
+        _row = {"who": _w}
+        for _key, _days, _hits in [
+            ("played", _calendar, _days_where(results.filter(pl.col("who") == _w))),
+            ("wins", _podium_days, _days_where(_mine.filter(pl.col("rank") == 1))),
+            ("podiums", _podium_days, _days_where(_mine.filter(pl.col("rank") <= 3))),
+        ]:
+            _row[f"{_key}_now"], _row[f"{_key}_best"] = _runs([d in _hits for d in _days])
+        for _g, _days in _game_days.items():
+            _won = _days_where(placements.filter(pl.col("category") == _g, pl.col("who") == _w, pl.col("rank") == 1))
+            _row[f"{_g}_best"] = _runs([d in _won for d in _days])[1]
+        _rows.append(_row)
+
+    if not _rows:
+        _table = mo.md("Pick at least one player to see their streaks.")
+    else:
+        _streaks = pl.DataFrame(_rows).sort(
+            ["wins_best", "wins_now", "podiums_best", "played_now"], descending=True
+        )
+        _colors = dict(zip(player_scale.domain, player_scale.range))
+        _pairs = ["played", "wins", "podiums"]
+        _numbers = [f"{k}_{s}" for k in _pairs for s in ("now", "best")] + [f"{g}_best" for g in GAMES]
+        _records = [c for c in _numbers if c.endswith("_best")]
+
+        _table = (
+            gt.GT(
+                _streaks.with_columns(
+                    who=pl.format('<span style="color:{}">●</span>&nbsp;{}', pl.col("who").replace_strict(_colors), pl.col("who"))
+                )
+            )
+            .cols_label(
+                who="Player",
+                **{f"{k}_now": "Now" for k in _pairs},
+                **{f"{k}_best": "Best" for k in _pairs},
+                **{f"{g}_best": name for g, name in GAMES.items()},
+            )
+            .tab_spanner("Days played in a row", columns=["played_now", "played_best"])
+            .tab_spanner("Daily wins in a row", columns=["wins_now", "wins_best"])
+            .tab_spanner("Podiums in a row", columns=["podiums_now", "podiums_best"])
+            .tab_spanner("Longest win run by game", columns=[f"{g}_best" for g in GAMES])
+            .fmt_markdown(columns="who")
+            .sub_zero(columns=_numbers, zero_text="–")
+            .cols_align("center", columns=_numbers)
+            .tab_source_note(
+                f"Now: the run that includes the latest day, {_last.isoformat()}. Best: the longest so far, in bold for the record. "
+                "Days played counts calendar days with at least one result; wins and podiums are overall daily places."
+            )
+            .opt_table_font(stack="system-ui")
+            .tab_options(
+                table_width="100%",
+                table_background_color="transparent",
+                table_font_color=INK,
+                table_border_top_style="hidden",
+                table_border_bottom_style="hidden",
+                column_labels_border_top_style="hidden",
+                column_labels_border_bottom_color=RULE,
+                column_labels_font_weight="600",
+                table_body_hlines_color=RULE,
+                table_body_border_bottom_color=RULE,
+                source_notes_font_size="12px",
+            )
+        )
+        # Bold each record holder (ties share it); a column where nobody has a run stays plain.
+        for _c in _records:
+            _top = _streaks[_c].max()
+            if _top:
+                _rows_at_top = [i for i, v in enumerate(_streaks[_c].to_list()) if v == _top]
+                _table = _table.tab_style(gt.style.text(weight="bold"), gt.loc.body(columns=_c, rows=_rows_at_top))
+    _table
+    return
+
+
 @app.cell
 def _(CATEGORIES, mo):
     trend_category = mo.ui.dropdown(CATEGORIES, value="Overall", label="Score")
