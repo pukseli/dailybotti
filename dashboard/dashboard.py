@@ -536,7 +536,7 @@ def _(mo):
 
 
 @app.cell
-def _(GAMES, INK, RULE, gt, mo, picked, pl, placements, player_scale, results):
+def _(GAMES, INK, RULE, gt, mo, picked, pl, placements, player_scale, results, timedelta):
     def _runs(flags):
         """The run still going on the last day, and the longest run, of consecutive True values."""
         now = best = 0
@@ -548,9 +548,10 @@ def _(GAMES, INK, RULE, gt, mo, picked, pl, placements, player_scale, results):
     def _days_where(df):
         return set(df["day"].to_list())
 
-    _last = results["day"].max()
+    _first, _last = results["day"].min(), results["day"].max()
     # Playing counts calendar days. Wins and podiums count the days that had a podium, so a day off ends the run.
-    _calendar = pl.date_range(results["day"].min(), _last, eager=True).to_list()
+    # Built in Python: in the browser, polars is 32-bit WebAssembly and pl.date_range overflows on a 1-day step.
+    _calendar = [_first + timedelta(days=i) for i in range((_last - _first).days + 1)]
     _overall = placements.filter(pl.col("category") == "overall")
     _podium_days = sorted(_days_where(_overall))
     _game_days = {g: sorted(_days_where(placements.filter(pl.col("category") == g))) for g in GAMES}
