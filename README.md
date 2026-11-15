@@ -99,7 +99,7 @@ On a phone, Share opens the share menu, so you can pick Telegram and then the gr
 
 - Only the **daily** puzzles count. Unlimited, archive, themed, Pop Culture and Geography modes are refused.
 - Only the **first** result for each game and day counts.
-- Eraly and Krillion results are filed by their puzzle number. Size It Up's share text has no number, so it counts for the day the bot receives it. Send it before the day closes.
+- Eraly and Krillion results are filed by their puzzle number. Size It Up's share text now has a number too (`#98`), but Magnitudle numbers its puzzles on its server, so the bot can't turn it into a date by itself. A Size It Up result counts for the day the bot receives it, so send it before the day closes. The number still helps: if someone in the group already sent that number on an earlier day, the result belongs to that day (and is refused if it has closed), and a number below the newest one sent before today is an older puzzle, such as one from the archive, and is refused.
 - Krillion's new puzzle appears at midnight New York time (7 am in Finland, 6 am in most of Europe). Before that, the playable Krillion is still the previous day's, which has already closed.
 - **Overall score:** each game is converted to a percentage of its maximum (Eraly 700, Krillion 700, Size It Up 500) and the three are added up, out of 300. A game you skip counts as 0.
 - Ties share a place: two 🥇 and then a 🥉.

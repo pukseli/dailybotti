@@ -41,6 +41,34 @@ describe("parseResults", () => {
     expect(parseResults(sizeItUpShare(437)).results).toEqual([{ game: "sizeitup", puzzle: null, score: 437 }]);
   });
 
+  it("reads the current Size It Up share with the puzzle number", () => {
+    // Exactly as a player pasted it on 2026-11-15.
+    const text = [
+      "Size It Up",
+      "#98",
+      "",
+      "Score: 285/500",
+      "",
+      "🟥🟥⬜⬜⬜ 41",
+      "🟥🟥🟥🟥⬜ 76",
+      "🟥🟥🟥🟥⬜ 84",
+      "🟥⬜⬜⬜⬜ 20",
+      "🟥🟥🟥⬜⬜ 64",
+      "",
+      "https://magnitudle.com/size-it-up",
+    ].join("\n");
+    expect(parseResults(text)).toEqual({ results: [{ game: "sizeitup", puzzle: 98, score: 285 }], rejected: [] });
+    expect(parseRoundData(text, "sizeitup").rounds).toEqual([41, 76, 84, 20, 64]);
+  });
+
+  it("refuses Pop Culture and Geography in the current share format", () => {
+    for (const title of ["Pop Culture", "Geography"]) {
+      const out = parseResults(`${title}\n#45\n\nScore: 300/500\n\n🟥🟥🟥⬜⬜ 60\n\nhttps://magnitudle.com/size-it-up/pop-culture`);
+      expect(out.results).toEqual([]);
+      expect(out.rejected[0]).toContain("Only the regular daily Size It Up counts");
+    }
+  });
+
   it("reads the new Magnitudle desktop Size It Up share format", () => {
     const text = [
       "Magnitudle — Size It Up",

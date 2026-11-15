@@ -1185,6 +1185,25 @@ interface RecordOutcome {
   boardDays: string[];
 }
 
+/**
+ * The day a numbered Size It Up result belongs to. Its numbers come from Magnitudle's server and can't be turned
+ * into a date here, so the group's own results decide: a number someone already sent belongs to the day it was
+ * first sent, and a number below the newest one sent before today is an older puzzle, e.g. from the archive.
+ * Otherwise it counts for today, like an unnumbered result.
+ */
+async function sizeItUpDay(db: D1Database, puzzle: number, today: string): Promise<string | "older"> {
+  const seen = await db
+    .prepare("SELECT MIN(day) AS day FROM results WHERE game = 'sizeitup' AND puzzle = ?")
+    .bind(puzzle)
+    .first<{ day: string | null }>();
+  if (seen?.day) return seen.day;
+  const newest = await db
+    .prepare("SELECT MAX(puzzle) AS puzzle FROM results WHERE game = 'sizeitup' AND day < ?")
+    .bind(today)
+    .first<{ puzzle: number | null }>();
+  return newest?.puzzle != null && puzzle < newest.puzzle ? "older" : today;
+}
+
 async function recordResults(ctx: Ctx, user: User, results: ParsedResult[], rawInput = ""): Promise<RecordOutcome> {
   const nowIso = ctx.now.toISOString();
   const day0 = today(ctx);
@@ -1195,8 +1214,13 @@ async function recordResults(ctx: Ctx, user: User, results: ParsedResult[], rawI
 
   for (const r of results) {
     const game = gameById(r.game)!;
-    const day = dayForResult(r, day0);
     const title = r.puzzle !== null ? `${game.name} #${r.puzzle}` : game.name;
+    const sizeItUp = r.game === "sizeitup" && r.puzzle !== null ? await sizeItUpDay(ctx.db, r.puzzle, day0) : null;
+    if (sizeItUp === "older") {
+      problems.push(`⛔ ${title} is an older puzzle (from the archive?), so it doesn't count today.`);
+      continue;
+    }
+    const day = sizeItUp ?? dayForResult(r, day0);
 
     if (day > addDays(day0, 1)) {
       problems.push(`⛔ ${title} isn't out yet, so I can't count it.`);

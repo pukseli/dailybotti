@@ -393,6 +393,34 @@ describe("a full day", () => {
   });
 });
 
+describe("numbered Size It Up results", () => {
+  const share = (puzzle: number, score: number) =>
+    `Size It Up\n#${puzzle}\n\nScore: ${score}/500\n\n🟥🟥⬜⬜⬜ 41\n\nhttps://magnitudle.com/size-it-up`;
+  const SAT_NOON = "2026-10-24T09:00:00Z";
+
+  it("saves the number, files a number sent before under its day, and refuses older numbers", async () => {
+    await linkGroup();
+    await handleUpdate(makeCtx(tg, FRI_NOON), dm(anna, share(98, 285)));
+    expect(tg.lastTextTo(anna.id)).toContain("✅ Size It Up #98: 285/500 saved.");
+    const row = await env.DB.prepare("SELECT day, puzzle FROM results WHERE player_id = ?").bind(anna.id).first();
+    expect(row).toEqual({ day: "2026-10-23", puzzle: 98 });
+
+    // Saturday: Ben sends Friday's #98 after midnight. Anna already placed #98 on Friday, which has closed.
+    await handleUpdate(makeCtx(tg, SAT_NOON), dm(ben, share(98, 400)));
+    expect(tg.lastTextTo(ben.id)).toContain("⛔ Size It Up #98 is for 2026-10-23, which has already closed.");
+
+    // An archive puzzle: older than the newest number sent before today.
+    await handleUpdate(makeCtx(tg, SAT_NOON), dm(ben, share(95, 480)));
+    expect(tg.lastTextTo(ben.id)).toContain("⛔ Size It Up #95 is an older puzzle (from the archive?), so it doesn't count today.");
+
+    // Saturday's own puzzle counts for Saturday.
+    await handleUpdate(makeCtx(tg, SAT_NOON), dm(ben, share(99, 310)));
+    expect(tg.lastTextTo(ben.id)).toContain("✅ Size It Up #99: 310/500 saved.");
+    const saved = await env.DB.prepare("SELECT day FROM results WHERE player_id = ? AND puzzle = 99").bind(ben.id).first();
+    expect(saved).toEqual({ day: "2026-10-24" });
+  });
+});
+
 describe("results posted in the group", () => {
   it("keeps the paste and confirms with a 👍 reaction, without messaging anyone", async () => {
     await linkGroup();

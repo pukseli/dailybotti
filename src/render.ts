@@ -652,7 +652,7 @@ export function renderHelp(opts: { closeTime: string; timeZone: string; linked: 
     "<b>Säännöt</b>",
     "• Vain päivän pelit lasketaan, eivät Unlimited-, arkisto- tai teemapelit eivätkä Size It Upin Pop Culture tai Geography.",
     "• Vain ensimmäinen tulos kustakin pelistä lasketaan.",
-    "• Size It Upin tuloksessa ei ole pelinumeroa, joten se lasketaan sille päivälle, jona lähetät sen.",
+    "• Size It Up lasketaan sille päivälle, jona lähetät sen, joten lähetä se ennen päivän sulkeutumista. Vanhoja pelejä, kuten arkistosta pelattuja, ei lasketa.",
     "• Kokonaispisteet: jokainen peli prosentteina maksimistaan, yhteensä enintään 300. Pelaamatta jäänyt peli on 0.",
     "• Daily Mättö -sijoitukset näkyvät leaderboardilla, mutta eivät vaikuta päivän overall-pisteisiin.",
     "",

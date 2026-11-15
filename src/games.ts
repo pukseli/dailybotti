@@ -13,7 +13,8 @@ export interface Game {
 // Formats and numbering come from each game's own share code:
 // - Eraly #1 is 16 Oct 2026, counted from the player's local midnight.
 // - Krillion #1 is 16 Jul 2026, counted from midnight New York time.
-// - Size It Up shares no number, so a result belongs to the day it arrives.
+// - Size It Up's numbers come from Magnitudle's server and can't be turned into a date here, so a result belongs
+//   to the day it arrives, unless the group's own results already place its number (see recordResults in bot.ts).
 export const GAMES: readonly Game[] = [
   { id: "eraly", name: "Eraly", max: 700, firstDay: "2026-10-16" },
   { id: "krillion", name: "Krillion", max: 700, firstDay: "2026-07-16" },
@@ -82,17 +83,23 @@ const KRILLION_BLOCK =
 
 // Old format:
 // "Size It Up\nOverall Score 437\n\n🟥🟥🟥🟥⬜ 85\n...\nhttps://magnitudle.com/size-it-up"
-// New format (e.g. desktop clipboard copy):
+// Later format (e.g. desktop clipboard copy):
 // "Magnitudle — Size It Up\n2026-11-04\n\nScore: 437/500\n\n🟥🟥🟥🟥⬜ 85\n...\n\nhttps://magnitudle.com/size-it-up"
+// Current format, with the puzzle number:
+// "Size It Up\n#98\n\nScore: 285/500\n\n🟥🟥⬜⬜⬜ 41\n...\n\nhttps://magnitudle.com/size-it-up"
 // Pop Culture, Geography, Unlimited and Archive have different titles or suffixes and don't match.
-const SIZE_IT_UP =
-  /(?:^|\n)[^\S\n]*(?:Magnitudle[^\S\n]*[—–-][^\S\n]*)?Size It Up[^\S\n]*(?:\n[^\S\n]*\d{4}-\d{2}-\d{2}[^\S\n]*)?\n\s*(?:Overall Score|Score:?)[^\S\n]*(\d+(?:[.,]\d+)?)(?:\s*\/\s*500)?(?!\d)/;
+const SIZE_IT_UP_DATE_OR_NUMBER = "(?:\\n[^\\S\\n]*(?:\\d{4}-\\d{2}-\\d{2}|#[^\\S\\n]*(\\d+))[^\\S\\n]*)?";
+const SIZE_IT_UP = new RegExp(
+  "(?:^|\\n)[^\\S\\n]*(?:Magnitudle[^\\S\\n]*[—–-][^\\S\\n]*)?Size It Up[^\\S\\n]*" +
+    SIZE_IT_UP_DATE_OR_NUMBER +
+    "\\n\\s*(?:Overall Score|Score:?)[^\\S\\n]*(\\d+(?:[.,]\\d+)?)(?:\\s*\\/\\s*500)?(?!\\d)",
+);
 const SIZE_IT_UP_OTHER =
-  /(?:Size It Up[^\n]*\S[^\n]*\n\s*(?:Overall Score|Score:?)|Size It Up[^\n]*\n[^\S\n]*\d{4}-\d{2}-\d{2}[^\S\n]*·|Magnitudle[^\S\n]*[—–-][^\S\n]*Size It Up[^\n]*\S[^\n]*\n|Size It Up Archive|Size It Up Unlimited)/i;
+  /(?:Size It Up[^\n]*\S[^\n]*\n\s*(?:Overall Score|Score:?)|Size It Up[^\n]*\n[^\S\n]*\d{4}-\d{2}-\d{2}[^\S\n]*·|Magnitudle[^\S\n]*[—–-][^\S\n]*Size It Up[^\n]*\S[^\n]*\n|Size It Up Archive|Size It Up Unlimited|(?:^|\n)[^\S\n]*(?:Pop Culture|Geography)[^\n]*\n(?:[^\S\n]*#[^\S\n]*\d+[^\S\n]*\n)?\s*Score:?[^\S\n]*\d+\s*\/\s*500)/i;
 const SIZE_IT_UP_ELEM = "(?:[🟥🔴⬜⚪◻◽▫]\\uFE0F?)";
 const SIZE_IT_UP_ROW = `(?:[^\\S\\n]*${SIZE_IT_UP_ELEM}{5}[^\\S\\n]+(?:\\d+(?:[.,]\\d+)?)\\*?[^\\S\\n]*(?:\\n|$))`;
 const SIZE_IT_UP_BLOCK = new RegExp(
-  `(?:^|\\n)[^\\S\\n]*((?:(?:Magnitudle[^\\S\\n]*[—–-][^\\S\\n]*)?Size It Up[^\\S\\n]*(?:\\n[^\\S\\n]*\\d{4}-\\d{2}-\\d{2}[^\\S\\n]*)?\\n\\s*(?:Overall Score|Score:?)[^\\S\\n]*\\d+(?:[.,]\\d+)?(?:\\s*/\\s*500)?(?!\\d))` +
+  `(?:^|\\n)[^\\S\\n]*((?:(?:Magnitudle[^\\S\\n]*[—–-][^\\S\\n]*)?Size It Up[^\\S\\n]*(?:\\n[^\\S\\n]*(?:\\d{4}-\\d{2}-\\d{2}|#[^\\S\\n]*\\d+)[^\\S\\n]*)?\\n\\s*(?:Overall Score|Score:?)[^\\S\\n]*\\d+(?:[.,]\\d+)?(?:\\s*/\\s*500)?(?!\\d))` +
     `(?:\\n(?:[^\\S\\n]*\\n)?(${SIZE_IT_UP_ROW}+))?` +
     `(?:\n?[^\\S\\n]*\\*[^\n]*)?` +
     `(?:\n?[^\\S\\n]*\n?[^\\S\\n]*https?:\\/\\/magnitudle\\.com\\/size-it-up\\S*)?)`,
@@ -126,8 +133,9 @@ export function parseResults(input: string): ParseOutcome {
 
   const sizeItUp = SIZE_IT_UP.exec(text);
   if (sizeItUp) {
-    const score = Math.round(Number(sizeItUp[1]!.replace(",", ".")));
-    if (score <= 500) results.push({ game: "sizeitup", puzzle: null, score });
+    const puzzle = sizeItUp[1] ? Number(sizeItUp[1]) : null;
+    const score = Math.round(Number(sizeItUp[2]!.replace(",", ".")));
+    if (score <= 500 && puzzle !== 0) results.push({ game: "sizeitup", puzzle, score });
     else rejected.push("That Size It Up result doesn't look right, so I skipped it.");
   } else if (SIZE_IT_UP_OTHER.test(text)) {
     rejected.push("Only the regular daily Size It Up counts (not Pop Culture, Geography, Unlimited or Archive).");
@@ -171,7 +179,7 @@ export function parseRoundData(input: string, game: GameId): RoundData {
   };
 }
 
-/** The day a result belongs to. Size It Up has no puzzle number, so it uses the day it arrived. */
+/** The day a result belongs to. Size It Up's number has no fixed start date, so it uses the day it arrived. */
 export function dayForResult(result: ParsedResult, today: string): string {
   const game = gameById(result.game)!;
   if (game.firstDay && result.puzzle !== null) return addDays(game.firstDay, result.puzzle - 1);
