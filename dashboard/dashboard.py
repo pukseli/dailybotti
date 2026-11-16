@@ -231,10 +231,11 @@ def _(
 
     # Rounds come as JSON: seven symbols for Krillion, five scores for Size It Up. Older rows may have none.
     # Parsed in Python because the browser build of polars has no str.json_decode.
-    def _rounds(game, column, dtype):
+    def _rounds(game, column, dtype, length=None):
         _rows = period_results.filter(pl.col("game") == game, pl.col("rounds_json").is_not_null())
+        _parsed = [(_w, _json.loads(_j)) for _w, _j in _rows.select("who", "rounds_json").iter_rows()]
         return pl.DataFrame(
-            [(_w, _json.loads(_j)) for _w, _j in _rows.select("who", "rounds_json").iter_rows()],
+            [(_w, _r) for _w, _r in _parsed if length is None or len(_r) == length],
             schema={"who": pl.String, column: pl.List(dtype)},
             orient="row",
         )
@@ -245,7 +246,10 @@ def _(
         # Some phones send ⬛ with an emoji presentation selector (⬛ + U+FE0F); it's the same symbol.
         .with_columns(pl.col("symbol").str.replace_all("\ufe0f", "", literal=True))
     )
-    _size_it_up = _rounds("sizeitup", "points", pl.Int64).explode("points")
+    # Before 9 Nov the bot missed some Size It Up round rows (iOS adds an invisible U+FE0F after ⬜) and only kept the
+    # rows it could read, mostly the all-red ones. Those part-saved results would inflate the 💯 rate and make round
+    # counts differ between players, so only results with all five rounds count here.
+    _size_it_up = _rounds("sizeitup", "points", pl.Int64, length=5).explode("points")
     _overall = period_placements.filter(pl.col("category") == "overall")
     _last_week = last_day - timedelta(days=6)
 
@@ -417,7 +421,7 @@ def _(
           .pf-none {{ color:{OTHER}; }}
         </style>
         <div class="pf-grid">{"".join(_sheet(w, f) for w, f in facts.items())}</div>
-        <div style="font-size:12px;color:{OTHER};margin-top:6px;font-family:system-ui,sans-serif">Hover a tag to see why. Krillion symbols run from lowest to highest points; 🌟 and 🤡 point values aren't confirmed yet.</div>
+        <div style="font-size:12px;color:{OTHER};margin-top:6px;font-family:system-ui,sans-serif">Hover a tag to see why. 💯 rounds only count Size It Up results with all five rounds saved (some from before 9 Nov were only partly saved). Krillion symbols run from lowest to highest points; 🌟 and 🤡 point values aren't confirmed yet.</div>
         """
     )
     return
